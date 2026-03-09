@@ -1,7 +1,9 @@
 package com.studyjun.backend.user;
 
 import jakarta.persistence.*;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "users")
 public class User {
@@ -26,21 +28,5 @@ public class User {
         this.email = email;
         this.password = password;
         this.name = name;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public String getName() {
-        return name;
     }
 }
