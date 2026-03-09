@@ -30,12 +30,12 @@ export function UrlShortenerForm() {
     setCreatedLink(null);
 
     if (!url.trim()) {
-      setError('Please enter a URL');
+      setError('URL을 입력해 주세요');
       return;
     }
 
     if (!isValidUrl(url)) {
-      setError('Please enter a valid URL');
+      setError('올바른 URL을 입력해 주세요');
       return;
     }
 
@@ -62,7 +62,7 @@ export function UrlShortenerForm() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      console.error('Failed to copy');
+      console.error('복사에 실패했습니다');
     }
   };
 
@@ -78,7 +78,7 @@ export function UrlShortenerForm() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               type="text"
-              placeholder="Paste your long URL here..."
+              placeholder="긴 URL을 여기에 붙여넣으세요..."
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               className="h-12 flex-1 bg-secondary text-foreground placeholder:text-muted-foreground"
@@ -92,7 +92,7 @@ export function UrlShortenerForm() {
                 <Spinner className="h-4 w-4" />
               ) : (
                 <>
-                  Shorten
+                  단축하기
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
@@ -106,7 +106,7 @@ export function UrlShortenerForm() {
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-xs text-muted-foreground">Original URL</p>
+              <p className="text-xs text-muted-foreground">원본 URL</p>
               <p className="mt-1 truncate text-sm text-foreground">
                 {createdLink.originalUrl}
               </p>
@@ -137,7 +137,7 @@ export function UrlShortenerForm() {
               </Button>
             </div>
             <Button variant="ghost" onClick={handleNewLink} className="w-full">
-              Shorten another URL
+              새 링크 만들기
             </Button>
           </div>
         </div>

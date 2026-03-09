@@ -10,15 +10,15 @@ interface StatusBadgeProps {
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const statusConfig = {
     active: {
-      label: 'Active',
+      label: '활성',
       className: 'bg-primary/10 text-primary border-primary/20',
     },
     inactive: {
-      label: 'Inactive',
+      label: '비활성',
       className: 'bg-muted text-muted-foreground border-border',
     },
     expired: {
-      label: 'Expired',
+      label: '만료',
       className: 'bg-destructive/10 text-destructive border-destructive/20',
     },
   };

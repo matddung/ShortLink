@@ -107,7 +107,7 @@ export function LinkDetailContent() {
         <Header variant="app" />
         <main className="mx-auto max-w-6xl px-4 py-8">
           <ErrorState
-            title="Link not found"
+            title="링크를 찾을 수 없습니다"
             message={error || 'The link you are looking for does not exist.'}
             onRetry={() => router.push('/dashboard')}
           />
@@ -127,7 +127,7 @@ export function LinkDetailContent() {
           className="mb-6 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
+          대시보드로 돌아가기
         </Link>
 
         {/* Link Header */}
@@ -144,7 +144,7 @@ export function LinkDetailContent() {
                 {link.originalUrl}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Created {formatDate(link.createdAt)}
+                생성일 {formatDate(link.createdAt)}
               </p>
             </div>
             <div className="flex gap-2">
@@ -152,19 +152,19 @@ export function LinkDetailContent() {
                 {copied ? (
                   <>
                     <Check className="mr-2 h-4 w-4 text-primary" />
-                    Copied
+                    복사됨
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-4 w-4" />
-                    Copy
+                    복사
                   </>
                 )}
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <a href={link.shortUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="mr-2 h-4 w-4" />
-                  Visit
+                  열기
                 </a>
               </Button>
             </div>
@@ -177,24 +177,24 @@ export function LinkDetailContent() {
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <AnalyticsSummaryCard
                 icon={<MousePointerClick className="h-5 w-5" />}
-                label="Total Clicks"
+                label="총 클릭 수"
                 value={stats.totalClicks.toLocaleString()}
               />
               <AnalyticsSummaryCard
                 icon={<Users className="h-5 w-5" />}
-                label="Unique Clicks"
+                label="고유 클릭 수"
                 value={stats.uniqueClicks.toLocaleString()}
               />
               <AnalyticsSummaryCard
                 icon={<Clock className="h-5 w-5" />}
-                label="Last Clicked"
+                label="마지막 클릭"
                 value={formatLastClicked(stats.lastClickedAt)}
               />
               <AnalyticsSummaryCard
                 icon={<Globe className="h-5 w-5" />}
-                label="Top Country"
-                value={stats.topCountries[0]?.country || 'N/A'}
-                subValue={stats.topCountries[0] ? `${stats.topCountries[0].count} clicks` : undefined}
+                label="상위 국가"
+                value={stats.topCountries[0]?.country || '없음'}
+                subValue={stats.topCountries[0] ? `${stats.topCountries[0].count}회 클릭` : undefined}
               />
             </div>
 
@@ -210,7 +210,7 @@ export function LinkDetailContent() {
 
             {/* Top Countries */}
             <div className="mt-6 rounded-lg border border-border bg-card p-5">
-              <h3 className="font-medium text-foreground">Top Countries</h3>
+              <h3 className="font-medium text-foreground">상위 국가</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Geographic distribution of your clicks
               </p>

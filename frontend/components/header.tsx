@@ -29,7 +29,7 @@ export function Header({ variant = 'landing' }: HeaderProps) {
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/dashboard">
                     <LayoutDashboard className="mr-2 h-4 w-4" />
-                    Dashboard
+                    대시보드
                   </Link>
                 </Button>
               )}
@@ -38,16 +38,16 @@ export function Header({ variant = 'landing' }: HeaderProps) {
               )}
               <Button variant="ghost" size="sm" onClick={logout}>
                 <LogOut className="mr-2 h-4 w-4" />
-                Logout
+                로그아웃
               </Button>
             </>
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/login">Log in</Link>
+                <Link href="/login">로그인</Link>
               </Button>
               <Button size="sm" asChild>
-                <Link href="/signup">Sign up</Link>
+                <Link href="/signup">회원가입</Link>
               </Button>
             </>
           )}

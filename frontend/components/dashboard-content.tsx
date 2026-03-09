@@ -73,14 +73,14 @@ export function DashboardContent() {
         {/* Page Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+            <h1 className="text-2xl font-semibold text-foreground">대시보드</h1>
             <p className="mt-1 text-muted-foreground">
-              Manage and track your shortened links
+              단축 링크를 관리하고 성과를 추적하세요
             </p>
           </div>
           <Button onClick={() => setIsModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Create link
+            링크 생성
           </Button>
         </div>
 
@@ -88,39 +88,39 @@ export function DashboardContent() {
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <StatCard
             icon={<Link2 className="h-5 w-5" />}
-            label="Total Links"
+            label="전체 링크"
             value={totalLinks.toString()}
           />
           <StatCard
             icon={<TrendingUp className="h-5 w-5" />}
-            label="Active Links"
+            label="활성 링크"
             value={activeLinks.toString()}
           />
           <StatCard
             icon={<MousePointerClick className="h-5 w-5" />}
-            label="Total Clicks"
+            label="총 클릭 수"
             value={totalClicks >= 1000 ? `${(totalClicks / 1000).toFixed(1)}k` : totalClicks.toString()}
           />
         </div>
 
         {/* Links Table */}
         <div className="mt-8">
-          <h2 className="mb-4 text-lg font-medium text-foreground">Your links</h2>
+          <h2 className="mb-4 text-lg font-medium text-foreground">내 링크</h2>
           
           {isLoading ? (
-            <LoadingState message="Loading your links..." />
+            <LoadingState message="링크를 불러오는 중..." />
           ) : error ? (
             <ErrorState
-              title="Failed to load links"
+              title="링크를 불러오지 못했습니다"
               message={error}
               onRetry={fetchLinks}
             />
           ) : links.length === 0 ? (
             <EmptyState
-              title="No links yet"
-              description="Create your first short link to get started with tracking and analytics."
+              title="아직 링크가 없습니다"
+              description="첫 단축 링크를 만들어 분석을 시작해보세요."
               action={{
-                label: 'Create your first link',
+                label: '첫 링크 만들기',
                 onClick: () => setIsModalOpen(true),
               }}
             />

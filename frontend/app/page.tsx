@@ -21,7 +21,7 @@ function LandingContent() {
         <div className="mx-auto max-w-4xl px-4 py-24 text-center sm:py-32">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 text-sm text-muted-foreground">
             <Zap className="h-3 w-3 text-primary" />
-            Fast, reliable, and free
+            빠르고, 안정적이며, 무료입니다
           </div>
           
           <h1 className="text-balance text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
@@ -30,8 +30,7 @@ function LandingContent() {
           </h1>
           
           <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg text-muted-foreground">
-            Create short, memorable links in seconds. Track clicks, analyze 
-            performance, and manage all your links from a single dashboard.
+            짧고 기억하기 쉬운 링크를 단 몇 초 만에 만드세요. 클릭 수를 추적하고, 실적을 분석하고, 모든 링크를 하나의 대시보드에서 관리하세요
           </p>
           
           <div className="mx-auto mt-10 max-w-xl">
@@ -39,11 +38,10 @@ function LandingContent() {
           </div>
           
           <p className="mt-4 text-sm text-muted-foreground">
-            No account required.{' '}
             <Link href="/signup" className="text-primary hover:underline">
-              Sign up free
+              무료 회원가입
             </Link>{' '}
-            for advanced features.
+            고급 기능이 필요하면 가입하세요
           </p>
         </div>
       </section>
@@ -53,29 +51,28 @@ function LandingContent() {
         <div className="mx-auto max-w-6xl px-4 py-20">
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
-              Everything you need to manage your links
+              링크 관리를 위한 모든 기능
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              ShortLink provides all the tools you need to create, manage, and 
-              track your short URLs with detailed analytics.
+              ShortLink는 링크 생성, 관리, 분석에 필요한 기능을 제공합니다
             </p>
           </div>
           
           <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
               icon={<Link2 className="h-5 w-5" />}
-              title="Instant Shortening"
-              description="Transform any URL into a short, memorable link in milliseconds. No waiting, no hassle."
+              title="즉시 단축"
+              description="어떤 URL이든 즉시 짧고 기억하기 쉬운 링크로 바꿔드립니다"
             />
             <FeatureCard
               icon={<BarChart3 className="h-5 w-5" />}
-              title="Detailed Analytics"
-              description="Track clicks, referrers, and geographic data. Understand your audience like never before."
+              title="상세 분석"
+              description="클릭, 유입 경로, 지역 데이터를 추적하고 사용자 행동을 깊이 있게 이해하세요"
             />
             <FeatureCard
               icon={<Shield className="h-5 w-5" />}
-              title="Link Management"
-              description="Activate, deactivate, or delete links anytime. Full control over your shortened URLs."
+              title="링크 관리"
+              description="언제든 활성/비활성/삭제가 가능하며 단축 링크를 완전히 제어할 수 있습니다"
             />
           </div>
         </div>
@@ -85,21 +82,21 @@ function LandingContent() {
       <section className="border-t border-border">
         <div className="mx-auto max-w-4xl px-4 py-20 text-center">
           <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
-            Ready to get started?
+            시작할 준비가 되셨나요?
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Create your free account and start shortening URLs in seconds.
+            무료 계정을 만들고 몇 초 만에 URL 단축을 시작하세요
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Button size="lg" asChild>
               <Link href="/signup">
-                Get started free
+                무료로 시작하기
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button variant="outline" size="lg" asChild>
               <Link href="/login">
-                Sign in to your account
+                로그인
               </Link>
             </Button>
           </div>
@@ -117,7 +114,7 @@ function LandingContent() {
               <span className="text-sm font-medium text-foreground">ShortLink</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Built for developers, by developers.
+              개발자를 위해, 개발자가 만든 서비스입니다
             </p>
           </div>
         </div>
