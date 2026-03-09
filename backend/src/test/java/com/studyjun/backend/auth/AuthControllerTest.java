@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockCookie;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -19,10 +20,11 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,13 +54,17 @@ class AuthControllerTest {
 
         var loginRequest = new AuthRequest.LoginRequest(email, "password123");
 
-        mockMvc.perform(post("/api/auth/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty());
+                .andExpect(jsonPath("$.data.refreshToken").isEmpty())
+                .andReturn();
+
+        assertThat(loginResult.getResponse().getCookie("refresh_token")).isNotNull();
+        assertThat(loginResult.getResponse().getHeader("Set-Cookie")).contains("refresh_token=");
     }
 
     @Test
@@ -86,12 +92,11 @@ class AuthControllerTest {
         String refreshToken = loginAndGetRefreshToken(email);
 
         mockMvc.perform(post("/api/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthRequest.RefreshRequest(refreshToken))))
+                        .cookie(new MockCookie("refresh_token", refreshToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty());
+                .andExpect(jsonPath("$.data.refreshToken").isEmpty());
     }
 
     @Test
@@ -113,15 +118,17 @@ class AuthControllerTest {
         signup(email);
         String refreshToken = loginAndGetRefreshToken(email);
 
-        mockMvc.perform(post("/api/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthRequest.RefreshRequest(refreshToken))))
+        MvcResult logoutResult = mockMvc.perform(post("/api/auth/logout")
+                        .cookie(new MockCookie("refresh_token", refreshToken)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+
+        assertThat(logoutResult.getResponse().getCookie("refresh_token")).isNotNull();
+        assertThat(logoutResult.getResponse().getHeader("Set-Cookie")).contains("Max-Age=0");
 
         mockMvc.perform(post("/api/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthRequest.RefreshRequest(refreshToken))))
+                        .cookie(new MockCookie("refresh_token", refreshToken)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
@@ -130,8 +137,7 @@ class AuthControllerTest {
     @Test
     void invalidRefreshTokenFails() throws Exception {
         mockMvc.perform(post("/api/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthRequest.RefreshRequest("invalid.token.value"))))
+                        .cookie(new MockCookie("refresh_token", "invalid.token.value")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
@@ -147,8 +153,7 @@ class AuthControllerTest {
                 .compact();
 
         mockMvc.perform(post("/api/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthRequest.RefreshRequest(expiredToken))))
+                        .cookie(new MockCookie("refresh_token", expiredToken)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("EXPIRED_REFRESH_TOKEN"));
@@ -168,8 +173,7 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        return json.path("data").path("refreshToken").asText();
+        return result.getResponse().getCookie("refresh_token").getValue();
     }
 
     private String loginAndGetAccessToken(String email) throws Exception {

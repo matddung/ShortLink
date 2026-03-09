@@ -25,7 +25,6 @@ interface BackendErrorEnvelope {
 
 interface BackendTokenResponse {
   accessToken: string;
-  refreshToken: string;
   tokenType: string;
   expiresIn: number;
 }
@@ -36,37 +35,19 @@ interface BackendUserResponse {
   name: string;
 }
 
-const REFRESH_TOKEN_KEY = 'shortlink_refresh_token';
 const USER_KEY = 'shortlink_user';
+let accessTokenMemory: string | null = null;
 
 // Token management
 export const tokenStorage = {
   get: (): string | null => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('shortlink_token');
+    return accessTokenMemory;
   },
   set: (token: string): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('shortlink_token', token);
+    accessTokenMemory = token;
   },
   remove: (): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem('shortlink_token');
-  },
-};
-
-const refreshTokenStorage = {
-  get: (): string | null => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
-  },
-  set: (token: string): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
-  },
-  remove: (): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    accessTokenMemory = null;
   },
 };
 
@@ -110,6 +91,7 @@ async function apiRequest<T>(
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      credentials: 'include',
     });
 
     const data = (await response.json()) as BackendEnvelope<T> | BackendErrorEnvelope;
@@ -144,6 +126,26 @@ const toUser = (backendUser: BackendUserResponse): User => ({
 
 // Auth API
 export const authApi = {
+  refresh: async (): Promise<ApiResponse<{ token: string }>> => {
+    if (USE_DUMMY_DATA) {
+      await delay(300);
+      const token = 'dummy-jwt-token-' + Date.now();
+      tokenStorage.set(token);
+      return { data: { token } };
+    }
+
+    const refreshResponse = await apiRequest<BackendTokenResponse>('/auth/refresh', {
+      method: 'POST',
+    });
+
+    if (refreshResponse.error || !refreshResponse.data) {
+      return { error: refreshResponse.error || '토큰 갱신에 실패했습니다.' };
+    }
+
+    tokenStorage.set(refreshResponse.data.accessToken);
+    return { data: { token: refreshResponse.data.accessToken } };
+  },
+
   signup: async (formData: SignupFormData): Promise<ApiResponse<AuthResponse>> => {
     if (USE_DUMMY_DATA) {
       await delay(800);
@@ -181,7 +183,6 @@ export const authApi = {
 
     const user = toUser(signupResponse.data);
     userStorage.set(user);
-    refreshTokenStorage.set(loginResponse.data.refreshToken);
 
     return {
       data: {
@@ -228,7 +229,6 @@ export const authApi = {
     };
 
     userStorage.set(user);
-    refreshTokenStorage.set(loginResponse.data.refreshToken);
 
     return {
       data: {
@@ -254,9 +254,11 @@ export const authApi = {
       return { error: '인증이 필요합니다.' };
     }
 
-    const cachedUser = userStorage.get();
-    if (cachedUser) {
-      return { data: cachedUser };
+    if (!tokenStorage.get()) {
+      const refreshResult = await authApi.refresh();
+      if (refreshResult.error) {
+        return { error: '인증이 필요합니다.' };
+      }
     }
 
     const meResponse = await apiRequest<BackendUserResponse>('/auth/me', {
@@ -273,17 +275,13 @@ export const authApi = {
   },
 
   logout: async (): Promise<void> => {
-    const refreshToken = refreshTokenStorage.get();
-
-    if (!USE_DUMMY_DATA && refreshToken) {
+    if (!USE_DUMMY_DATA) {
       await apiRequest<string>('/auth/logout', {
         method: 'POST',
-        body: JSON.stringify({ refreshToken }),
       });
     }
 
     tokenStorage.remove();
-    refreshTokenStorage.remove();
     userStorage.remove();
   },
 };

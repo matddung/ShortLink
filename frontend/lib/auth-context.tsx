@@ -29,8 +29,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const checkAuth = useCallback(async () => {
-    const token = tokenStorage.get();
-    if (!token) {
+    const refreshResponse = await authApi.refresh();
+    if (refreshResponse.error) {
+      tokenStorage.remove();
+      setUser(null);
       setIsLoading(false);
       return;
     }
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(response.data);
     } else {
       tokenStorage.remove();
+      setUser(null);
     }
     setIsLoading(false);
   }, []);
