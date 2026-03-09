@@ -132,8 +132,8 @@ async function apiRequest<T>(
 }
 
 // In-memory store for dummy data mutations
-let localLinks = [...dummyLinks];
-let nextLinkId = 7;
+let localLinks = USE_DUMMY_DATA ? [...dummyLinks] : [];
+let nextLinkId = USE_DUMMY_DATA ? dummyLinks.length + 1 : 1;
 
 const toUser = (backendUser: BackendUserResponse): User => ({
   id: String(backendUser.id),
@@ -259,7 +259,17 @@ export const authApi = {
       return { data: cachedUser };
     }
 
-    return { error: '사용자 정보를 불러올 수 없습니다. 다시 로그인해 주세요.' };
+    const meResponse = await apiRequest<BackendUserResponse>('/auth/me', {
+      method: 'GET',
+    });
+
+    if (meResponse.error || !meResponse.data) {
+      return { error: meResponse.error || '사용자 정보를 불러올 수 없습니다. 다시 로그인해 주세요.' };
+    }
+
+    const user = toUser(meResponse.data);
+    userStorage.set(user);
+    return { data: user };
   },
 
   logout: async (): Promise<void> => {

@@ -2,10 +2,8 @@ package com.studyjun.backend.auth;
 
 import com.studyjun.backend.common.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -36,5 +34,10 @@ public class AuthController {
     public ApiResponse<String> logout(@Valid @RequestBody AuthRequest.RefreshRequest request) {
         authService.logout(request.refreshToken());
         return ApiResponse.ok("로그아웃 되었습니다.");
+    }
+
+    @GetMapping("/me")
+    public ApiResponse<AuthResponse.UserResponse> me(Authentication authentication) {
+        return ApiResponse.ok(authService.getCurrentUser(authentication.getName()));
     }
 }

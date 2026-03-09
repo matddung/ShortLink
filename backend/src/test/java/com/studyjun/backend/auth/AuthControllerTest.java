@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -94,6 +95,19 @@ class AuthControllerTest {
     }
 
     @Test
+    void meReturnsAuthenticatedUser() throws Exception {
+        String email = uniqueEmail("me");
+        signup(email);
+        String accessToken = loginAndGetAccessToken(email);
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.email").value(email));
+    }
+
+    @Test
     void logoutThenRefreshFails() throws Exception {
         String email = uniqueEmail("logout");
         signup(email);
@@ -156,6 +170,17 @@ class AuthControllerTest {
 
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
         return json.path("data").path("refreshToken").asText();
+    }
+
+    private String loginAndGetAccessToken(String email) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
+        return json.path("data").path("accessToken").asText();
     }
 
     private String uniqueEmail(String prefix) {
