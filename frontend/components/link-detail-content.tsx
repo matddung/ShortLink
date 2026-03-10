@@ -41,7 +41,9 @@ export function LinkDetailContent() {
       setLink(linkResponse.data);
     }
 
-    if (statsResponse.data) {
+    if (statsResponse.error) {
+      setError(statsResponse.error);
+    } else if (statsResponse.data) {
       setStats(statsResponse.data);
     }
 
@@ -215,21 +217,27 @@ export function LinkDetailContent() {
                 Geographic distribution of your clicks
               </p>
               
-              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                {stats.topCountries.map((country, index) => (
-                  <div
-                    key={country.country}
-                    className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">#{index + 1}</span>
-                      <span className="text-sm text-foreground">{country.country}</span>
+               <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {stats.topCountries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    아직 국가별 집계 데이터가 없습니다.
+                  </p>
+                ) : (
+                  stats.topCountries.map((country, index) => (
+                    <div
+                      key={country.country}
+                      className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">#{index + 1}</span>
+                        <span className="text-sm text-foreground">{country.country}</span>
+                      </div>
+                      <span className="text-sm font-medium text-foreground">
+                        {country.count}
+                      </span>
                     </div>
-                    <span className="text-sm font-medium text-foreground">
-                      {country.count}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </>

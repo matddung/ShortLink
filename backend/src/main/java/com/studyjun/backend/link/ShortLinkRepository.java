@@ -11,6 +11,8 @@ public interface ShortLinkRepository extends JpaRepository<ShortLink, Long> {
 
     Optional<ShortLink> findByShortCode(String shortCode);
 
+    Optional<ShortLink> findByIdAndOwnerUserId(Long id, Long ownerUserId);
+
     List<ShortLink> findAllByOwnerKeyAndOwnerUserIdIsNullOrderByCreatedAtDesc(String ownerKey);
 
     List<ShortLink> findAllByOwnerUserIdOrderByCreatedAtDesc(Long ownerUserId);

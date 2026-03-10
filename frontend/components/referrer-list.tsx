@@ -13,22 +13,28 @@ export function ReferrerList({ referrers }: ReferrerListProps) {
       </p>
       
       <div className="mt-6 space-y-4">
-        {referrers.map((referrer) => (
-          <div key={referrer.source}>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-foreground">{referrer.source}</span>
-              <span className="text-muted-foreground">
-                {referrer.count.toLocaleString()} ({referrer.percentage}%)
-              </span>
+        {referrers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            아직 유입 경로 데이터가 없습니다.
+          </p>
+        ) : (
+          referrers.map((referrer) => (
+            <div key={referrer.source}>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-foreground">{referrer.source}</span>
+                <span className="text-muted-foreground">
+                  {referrer.count.toLocaleString()} ({referrer.percentage}%)
+                </span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${referrer.percentage}%` }}
+                />
+              </div>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${referrer.percentage}%` }}
-              />
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

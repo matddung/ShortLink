@@ -25,7 +25,7 @@ export function DailyClicksChart({ data }: DailyClicksChartProps) {
     <div className="rounded-lg border border-border bg-card p-5">
       <h3 className="font-medium text-foreground">Daily Clicks</h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        Click activity over the last 14 days
+        Click activity over the last 14 days (today cumulative)
       </p>
       
       <div className="mt-6 h-64">

@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { linksApi } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth-context';
 import type { Link } from '@/lib/types';
 
 export function UrlShortenerForm() {
+  const { isAuthenticated } = useAuth();
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,7 +42,9 @@ export function UrlShortenerForm() {
     }
 
     setIsLoading(true);
-    const response = await linksApi.createAnonymous(url);
+    const response = isAuthenticated
+      ? await linksApi.create({ originalUrl: url })
+      : await linksApi.createAnonymous(url);
     setIsLoading(false);
 
     if (response.error) {

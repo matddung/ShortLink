@@ -162,6 +162,150 @@ class LinkControllerTest {
                 .andExpect(header().string("Location", "https://dashboard.example.com/path"));
     }
 
+    @Test
+    void linkStatsIncludesCountryAndReferrerAggregation() throws Exception {
+        String email = "stats-" + UUID.randomUUID() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(email, "password123", "stats-user"))))
+                .andExpect(status().isOk());
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+
+        MvcResult createResult = mockMvc.perform(post("/api/links")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\":\"https://stats.example.com/path\",\"customCode\":\"stats-link-01\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+        String shortCode = created.path("shortCode").asText();
+        String linkId = created.path("id").asText();
+
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("CF-IPCountry", "KR")
+                        .header("Referer", "https://search.example.com/result")
+                        .header("User-Agent", "test-agent-1")
+                        .header("X-Forwarded-For", "203.0.113.10"))
+                .andExpect(status().isFound());
+
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("CF-IPCountry", "US")
+                        .header("Referer", "https://social.example.com/post")
+                        .header("User-Agent", "test-agent-2")
+                        .header("X-Forwarded-For", "198.51.100.20"))
+                .andExpect(status().isFound());
+
+        mockMvc.perform(get("/api/links/{id}/stats", linkId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.totalClicks").value(2))
+                .andExpect(jsonPath("$.data.uniqueClicks").value(2))
+                .andExpect(jsonPath("$.data.topCountries[0].country").exists())
+                .andExpect(jsonPath("$.data.referrers[0].source").exists())
+                .andExpect(jsonPath("$.data.dailyClicks.length()").value(14));
+    }
+
+
+    @Test
+    void countryCodeFallsBackToAcceptLanguageWhenGeoHeadersMissing() throws Exception {
+        String email = "lang-" + UUID.randomUUID() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(email, "password123", "lang-user"))))
+                .andExpect(status().isOk());
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+
+        MvcResult createResult = mockMvc.perform(post("/api/links")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\":\"https://lang.example.com/path\",\"customCode\":\"lang-link-01\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+        String shortCode = created.path("shortCode").asText();
+        String linkId = created.path("id").asText();
+
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8")
+                        .header("User-Agent", "lang-agent")
+                        .header("X-Forwarded-For", "203.0.113.30"))
+                .andExpect(status().isFound());
+
+        mockMvc.perform(get("/api/links/{id}/stats", linkId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.topCountries[0].country").value("KR"));
+    }
+
+
+    @Test
+    void countryCodeFallsBackToLanguageMappingWhenAcceptLanguageHasNoRegion() throws Exception {
+        String email = "lang-only-" + UUID.randomUUID() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(email, "password123", "lang-only-user"))))
+                .andExpect(status().isOk());
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+
+        MvcResult createResult = mockMvc.perform(post("/api/links")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\":\"https://lang-only.example.com/path\",\"customCode\":\"lang-only-link-01\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+        String shortCode = created.path("shortCode").asText();
+        String linkId = created.path("id").asText();
+
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("Accept-Language", "ko")
+                        .header("User-Agent", "lang-only-agent")
+                        .header("X-Forwarded-For", "203.0.113.31"))
+                .andExpect(status().isFound());
+
+        mockMvc.perform(get("/api/links/{id}/stats", linkId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.topCountries[0].country").value("KR"));
+    }
+
     private void createAnonymous(String url, MockCookie owner) throws Exception {
         mockMvc.perform(post("/api/links/anonymous")
                         .cookie(owner)

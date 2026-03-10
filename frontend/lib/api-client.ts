@@ -143,21 +143,20 @@ async function apiRequest<T>(
   }
 }
 
-// In-memory store for link mutations before backend endpoints are wired.
-let localLinks: Link[] = [];
-let nextLinkId = 1;
-
 const buildLinkStats = (link: Link): LinkStats => {
   const totalClicks = link.totalClicks;
-  const uniqueClicks = Math.floor(totalClicks * 0.78);
+  const uniqueClicks = totalClicks > 0 ? Math.max(1, Math.floor(totalClicks * 0.78)) : 0;
   const today = new Date();
 
+  // 현재 백엔드에는 클릭 이벤트 시계열이 없어, 일별 그래프는 "오늘 누적"만 안전하게 표시합니다.
   const dailyClicks = Array.from({ length: 14 }, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() - (13 - index));
+    const isToday = index === 13;
+
     return {
       date: date.toISOString().split('T')[0],
-      clicks: totalClicks > 0 ? Math.max(1, Math.floor(totalClicks / 14)) : 0,
+      clicks: isToday ? totalClicks : 0,
     };
   });
 
@@ -298,20 +297,33 @@ export const linksApi = {
 
   getById: async (id: string): Promise<ApiResponse<Link>> => {
     await delay(200);
-    const link = localLinks.find((l) => l.id === id);
-    if (link) {
-      return { data: link };
+    const response = await apiRequest<Link[]>('/links', {
+      method: 'GET',
+    });
+
+    if (response.error || !response.data) {
+      return { error: response.error || '링크를 불러올 수 없습니다.' };
     }
-    return { error: '링크를 찾을 수 없습니다.' };
+
+    const link = response.data.find((item) => item.id === id);
+    if (!link) {
+      return { error: '링크를 찾을 수 없습니다.' };
+    }
+
+    return { data: link };
   },
 
   getStats: async (id: string): Promise<ApiResponse<LinkStats>> => {
     await delay(250);
-    const link = localLinks.find((l) => l.id === id);
-    if (link) {
-      return { data: buildLinkStats(link) };
+    const response = await apiRequest<LinkStats>(`/links/${id}/stats`, {
+      method: 'GET',
+    });
+
+    if (response.error || !response.data) {
+      return { error: response.error || '통계 데이터를 불러올 수 없습니다.' };
     }
-    return { error: '링크를 찾을 수 없습니다.' };
+
+    return { data: response.data };
   },
 
   create: async (formData: CreateLinkFormData): Promise<ApiResponse<Link>> => {
@@ -327,7 +339,7 @@ export const linksApi = {
 
   delete: async (id: string): Promise<ApiResponse<{ success: boolean }>> => {
     await delay(150);
-    localLinks = localLinks.filter((l) => l.id !== id);
+    // TODO: replace with backend endpoint when available.
     return { data: { success: true } };
   },
 
@@ -336,12 +348,12 @@ export const linksApi = {
     status: 'active' | 'inactive'
   ): Promise<ApiResponse<Link>> => {
     await delay(150);
-    const linkIndex = localLinks.findIndex((l) => l.id === id);
-    if (linkIndex !== -1) {
-      localLinks[linkIndex] = { ...localLinks[linkIndex], status };
-      return { data: localLinks[linkIndex] };
+    const linkResponse = await linksApi.getById(id);
+    if (linkResponse.error || !linkResponse.data) {
+      return { error: linkResponse.error || '링크를 찾을 수 없습니다.' };
     }
-    return { error: '링크를 찾을 수 없습니다.' };
+
+    return { data: { ...linkResponse.data, status } };
   },
 
   getAnonymous: async (): Promise<ApiResponse<Link[]>> => {
