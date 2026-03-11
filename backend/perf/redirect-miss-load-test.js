@@ -1,6 +1,8 @@
 import http from 'k6/http';
 import { check } from 'k6';
 
+http.setResponseCallback(http.expectedStatuses(404));
+
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MISSING_SHORT_CODE = __ENV.MISSING_SHORT_CODE || 'not-exists-001';
 const TARGET_RPS = Number(__ENV.TARGET_RPS || 1200);
@@ -30,11 +32,18 @@ export const options = {
 export default function () {
   const response = http.get(`${BASE_URL}/s/${MISSING_SHORT_CODE}`, {
     redirects: 0,
-    tags: { endpoint: 'redirect-miss', short_code: MISSING_SHORT_CODE },
+    tags: { endpoint: 'redirect-miss', traffic: 'missing-shortcode' },
   });
 
   check(response, {
     'status is 404': (r) => r.status === 404,
-    'body has LINK_NOT_FOUND code': (r) => (r.body || '').includes('LINK_NOT_FOUND'),
+    'body has LINK_NOT_FOUND code': (r) => {
+      try {
+        const body = JSON.parse(r.body || '{}');
+        return body.code === 'LINK_NOT_FOUND';
+      } catch (_) {
+        return false;
+      }
+    },
   });
 }
