@@ -1,6 +1,6 @@
-# Single hot shortCode test 테스트
+# 테스트
 
-## 1. 개요
+## 개요
 
 테스트는 로컬 단일 머신 환경에서 수행되었으며, 운영 환경 성능과 직접적으로 동일하지 않을 수 있습니다.
 
@@ -29,6 +29,8 @@
 - DB connection: Spring Boot Actuator (`hikaricp.connections.active`)
 
 DB connection 수는 테스트 실행 중 Actuator endpoint를 통해 단일 시점 스냅샷으로 확인
+
+# Single hot shortCode test
 
 ### 부하 단계 요약
 
@@ -127,7 +129,7 @@ DB connection 수는 테스트 실행 중 Actuator endpoint를 통해 단일 시
 
 ## 2. 문제
 
-PostgreSQL `pg_stat_statements` 결과 기준으로 redirect 요청 1건당 DB 작업이 3개 발생함.
+PostgreSQL `pg_stat_statements` 결과 기준으로 redirect 요청 1건당 DB 작업이 3개 발생함
 
 * `select ... from short_links where short_code = ?`
 * `insert into link_click_events ...`
@@ -143,11 +145,11 @@ request
  -> HTTP 302 redirect
 ```
 
-문제점은 세 가지입니다.
+문제점은 세 가지
 
-첫째, 동일 shortCode 요청에도 매번 `short_links` 조회가 발생합니다.
-둘째, 클릭 로그를 redirect hot path에서 동기 insert 하고 있습니다.
-셋째, 같은 `short_links` row를 매 요청마다 update 하면서 hotspot을 만들고 있습니다.
+첫째, 동일 shortCode 요청에도 매번 `short_links` 조회가 발생  
+둘째, 클릭 로그를 redirect hot path에서 동기 insert 하고 있음  
+셋째, 같은 `short_links` row를 매 요청마다 update 하면서 hotspot을 만들고 있음
 
 ---
 
@@ -155,48 +157,80 @@ request
 
 ### 캐시 부재
 
-동일 shortCode 요청인데도 `short_links` select 호출 수가 요청 수와 거의 동일했습니다.
-즉 `shortCode -> originalUrl` 조회가 캐시 없이 매번 DB에서 수행되고 있습니다.
+동일 shortCode 요청인데도 `short_links` select 호출 수가 요청 수와 거의 동일  
+즉 `shortCode -> originalUrl` 조회가 캐시 없이 매번 DB에서 수행
 
 ### 클릭 로그 동기 저장
 
-`link_click_events` insert가 요청 수만큼 증가했습니다.
-redirect 응답 경로에서 로그 저장을 직접 처리하고 있다는 뜻입니다.
+`link_click_events` insert가 요청 수만큼 증가  
+redirect 응답 경로에서 로그 저장을 직접 처리하고 있다는 뜻
 
 ### 동일 row update hotspot
 
-`short_links`의 같은 row에 대해 `total_clicks` update가 요청마다 발생했습니다.
-같은 shortCode 하나에 요청을 몰아넣는 시나리오에서는 이 부분이 row contention의 핵심 후보입니다.
+`short_links`의 같은 row에 대해 `total_clicks` update가 요청마다 발생  
+같은 shortCode 하나에 요청을 몰아넣는 시나리오에서는 이 부분이 row contention의 핵심 후보
 
 ### 경계 구간의 높은 편차
 
-2200 RPS에서 결과가 크게 흔들렸습니다.
+2200 RPS에서 결과가 크게 흔들림
 
 * 한 번은 p95/p99가 크게 악화
 * 한 번은 성공했지만 p99가 높음
 * 한 번은 비교적 안정적
 
-이건 2200 RPS가 절대 실패 지점이라기보다, **로컬 환경 기준 경계 구간**임을 의미합니다.
-JVM 워밍업, DB/OS 캐시, 커넥션 재사용, 로컬 머신 잡음 차이에 따라 결과가 흔들릴 수 있습니다.
+이건 2200 RPS가 절대 실패 지점이라기보다, **로컬 환경 기준 경계 구간**임을 의미  
+JVM 워밍업, DB/OS 캐시, 커넥션 재사용, 로컬 머신 잡음 차이에 따라 결과가 흔들릴 수 있습니다
 
 ### DB 의존성 확인
 
-HikariCP active connections가 평상시 0에서 부하 시 증가했습니다.
-즉 redirect 처리 경로가 DB 연결 점유와 직접 연결되어 있으며, 구조적으로 DB 의존도가 높습니다.
+HikariCP active connections가 평상시 0에서 부하 시 증가  
+즉 redirect 처리 경로가 DB 연결 점유와 직접 연결되어 있으며, 구조적으로 DB 의존도가 높음
 
 ---
 
-## 최종 요약
+# Distributed random test
 
-* 본 테스트 환경 기준으로 2000 RPS까지는 안정적으로 처리되었습니다.
-* 2200 RPS는 성공/실패가 섞이는 경계 구간이며 편차가 컸습니다.
-* 3000 RPS는 현재 로컬 환경 및 k6 설정 기준 명확한 실패 구간이었습니다.
-* DB 기준으로 redirect 요청 1건당 `select 1 + insert 1 + update 1`이 발생했습니다.
-* CPU 사용률은 낮아 CPU bottleneck 가능성은 낮습니다.
-* HikariCP active connections는 부하 시 증가하여 DB 의존 구조임을 뒷받침했습니다.
-* 핵심 병목 후보는 **캐시 없는 조회 + 동기 클릭 로그 insert + 동일 row update hotspot**입니다.
+## 테스트 목적
 
-가장 보수적으로 결론 내리면 이렇습니다.
+단일 hot shortCode 집중이 아닌, `code001 ~ code100`에 요청을 랜덤 분산시켜 read-heavy 상황에서 redirect 경로의 처리 성능과 DB read 부하 증가 여부를 확인
 
-**현재 로컬 환경 기준 안정 구간은 2000 RPS 수준이며, 2200 RPS는 경계 구간, 3000 RPS는 실패 구간입니다.**
-구조 개선 없이 더 높은 처리량을 안정적으로 기대하기는 어렵습니다.
+## 부하 단계 요약
+
+| 단계 | 목표 RPS | 실제 처리 | 결과 |
+| --- | ---: | ---: | --- |
+| phase_1_read | 600 | 600.00 | 안정 |
+| phase_2_read | 1200 | 1200.00 | 안정 |
+| phase_3_read | 1800 | 1800.00 | 안정 |
+
+추가 관측:
+
+- total complete iterations: 216,003
+- interrupted iterations: 0
+- dropped iterations: 0
+
+## 주요 성능 결과
+
+### 전체(3분 합산)
+
+* checks rate: 1 (100%)
+* http_req_failed rate: 0
+* http_req_duration p95: 2.0309 ms
+* http_req_duration p99: 2.8132 ms
+
+### phase별 처리 안정성
+
+* phase_1_read: 1분 동안 600 iters/s 유지
+* phase_2_read: 1분 동안 1200 iters/s 유지
+* phase_3_read: 1분 동안 1800 iters/s 유지
+* dropped iterations: 전체 구간에서 0
+
+## 해석 가이드
+
+- phase가 올라갈수록(`600 -> 1200 -> 1800`) `short_links select`의 `calls` 증가폭이 선형/비선형인지 확인
+- p95/p99가 낮고 dropped iterations가 0이면 현재 구간은 안정 처리로 해석 가능
+- throughput 증가 대비 DB read calls 증가율이 더 크면, DB read path 병목으로 수렴하는 신호로 해석 가능
+
+---
+
+즉, 분산 시나리오에서는 제공된 실행 로그 기준으로 **600/1200/1800 RPS를 모두 안정적으로 소화**했고, **p95/p99도 낮게 유지**  
+다만 DB read 부하 누적 여부는 `pg_stat_statements` calls 추적을 함께 확인해 최종 판단해야 함
