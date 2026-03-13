@@ -11,7 +11,7 @@ const EXPECTED_LOCATION = __ENV.EXPECTED_LOCATION || 'https://op.gg/ko/lol/champ
 
 export const options = {
   scenarios: {
-    redirect_traffic: {
+    select_only_redirect_traffic: {
       executor: 'constant-arrival-rate',
       rate: TARGET_RPS,
       timeUnit: '1s',
@@ -29,9 +29,9 @@ export const options = {
 };
 
 export default function () {
-  const response = http.get(`${BASE_URL}/s/${SHORT_CODE}`, {
+  const response = http.get(`${BASE_URL}/s-select/${SHORT_CODE}`, {
     redirects: 0,
-    tags: { endpoint: 'redirect' },
+    tags: { endpoint: 'redirect-select-only' },
   });
 
   check(response, {

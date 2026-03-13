@@ -209,6 +209,19 @@ public class LinkService {
         return shortLink.getOriginalUrl();
     }
 
+    @Transactional
+    public String resolveOriginalUrlSelectOnly(String shortCode) {
+        ShortLink shortLink = shortLinkRepository.findByShortCode(shortCode)
+                .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        if (isAnonymousExpired(shortLink)) {
+            shortLinkRepository.delete(shortLink);
+            throw new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+
+        return shortLink.getOriginalUrl();
+    }
+
     private boolean isAnonymousExpired(ShortLink shortLink) {
         return shortLink.getOwnerUserId() == null
                 && shortLink.getAnonymousExpiresAt() != null

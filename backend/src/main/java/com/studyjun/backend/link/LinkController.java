@@ -129,6 +129,14 @@ public class LinkController {
                 .build();
     }
 
+    @GetMapping("/s-select/{shortCode}")
+    public ResponseEntity<Void> redirectSelectOnly(@PathVariable String shortCode) {
+        String originalUrl = linkService.resolveOriginalUrlSelectOnly(shortCode);
+        return ResponseEntity.status(302)
+                .header(HttpHeaders.LOCATION, URI.create(originalUrl).toString())
+                .build();
+    }
+
     private User getAuthenticatedUser(Authentication authentication) {
         return userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));

@@ -47,3 +47,13 @@ export default function () {
     },
   });
 }
+
+export function handleSummary(data) {
+  let output = '\n=== Summary ===\n';
+  output += `checks rate: ${data.metrics.checks?.values?.rate ?? 'n/a'}\n`;
+  output += `http_req_failed rate: ${data.metrics.http_req_failed?.values?.rate ?? 'n/a'}\n`;
+  output += `http_req_duration p95: ${data.metrics.http_req_duration?.values?.['p(95)'] ?? 'n/a'}\n`;
+  output += `http_req_duration p99: ${data.metrics.http_req_duration?.values?.['p(99)'] ?? 'n/a'}\n`;
+
+  return { stdout: output };
+}
