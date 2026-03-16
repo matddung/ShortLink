@@ -8,14 +8,14 @@ INSERT INTO short_links (
   anonymous_expires_at
 )
 SELECT
-  format('https://example.com/%s', lpad(gs::text, 3, '0')) AS original_url,
-  format('code%s', lpad(gs::text, 3, '0')) AS short_code,
+  format('https://example.com/%s', lpad(gs::text, 6, '0')) AS original_url,
+  format('code%s', lpad(gs::text, 6, '0')) AS short_code,
   now() AS created_at,
   0 AS total_clicks,
-  format('perf-seed-%s', lpad(gs::text, 3, '0')) AS owner_key,
+  format('perf-seed-%s', lpad(gs::text, 6, '0')) AS owner_key,
   NULL AS owner_user_id,
   NULL AS anonymous_expires_at
-FROM generate_series(1, 100) AS gs
+FROM generate_series(1, 100000) AS gs
 ON CONFLICT (short_code) DO UPDATE
 SET
   original_url = EXCLUDED.original_url,

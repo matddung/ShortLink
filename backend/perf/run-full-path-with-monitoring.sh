@@ -4,9 +4,9 @@ set -euo pipefail
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <k6-script> [k6 args...]"
   echo "Examples:"
-  echo "  $0 backend/perf/redirect-load-test.js"
-  echo "  $0 backend/perf/redirect-miss-load-test.js"
-  echo "  $0 backend/perf/redirect-random-distributed.js"
+  echo "  $0 backend/perf/full-path-hot.js"
+  echo "  $0 backend/perf/full-path-miss.js"
+  echo "  $0 backend/perf/full-path-random.js"
   exit 1
 fi
 
@@ -43,7 +43,7 @@ reset_pg_stat_statements() {
 }
 
 collect_db_snapshot() {
-  psql "$DATABASE_URL" -At -F',' -f backend/perf/pg-stat-redirect.sql
+  psql "$DATABASE_URL" -At -F',' -f backend/perf/pg-stat-full-path.sql
 }
 
 sampler() {

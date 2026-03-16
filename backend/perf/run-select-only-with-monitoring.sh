@@ -39,7 +39,7 @@ reset_pg_stat_statements() {
 }
 
 collect_db_snapshot() {
-  psql "$DATABASE_URL" -At -F',' -f backend/perf/pg-stat-redirect-select-only.sql
+  psql "$DATABASE_URL" -At -F',' -f backend/perf/pg-stat-select-only.sql
 }
 
 sampler() {
