@@ -425,7 +425,7 @@ Redis counter
 
 효과
 
-- row hotspot 제거
+- row hotspot 완화
 - DB write 감소
 
 ---
@@ -479,3 +479,94 @@ full-path ceiling ≈ 400 RPS
 3. redirect lookup cache 도입
 4. negative caching 적용
 
+---
+
+## Phase 1. Async Analytics Write
+
+### What changed
+
+Before
+
+```
+request
+→ short_links select
+→ link_click_events insert
+→ short_links update
+→ redirect
+```
+
+After
+
+```
+request
+→ short_links select
+→ event publish
+→ redirect
+
+consumer
+→ link_click_events insert
+→ short_links update
+```
+
+### Measured impact
+
+- hot key: 약 **400 RPS → 500 RPS** (약 20~30% 개선)
+- random distributed: **1200+ RPS 구간 안정성 유지**
+- miss traffic: dropped iterations가 줄고 **select-only에 근접**
+
+### Interpretation
+
+Phase 1의 핵심 효과는 **request path에서 write를 제거**한 것이다.
+
+다만 write 자체가 사라진 것은 아니며, consumer에서 여전히
+
+```
+update short_links (per event)
+```
+
+를 수행하기 때문에 hot key에서는 ceiling이 남는다.
+
+---
+
+## Phase 2. Counter Aggregation
+
+### What changed
+
+Before (async only)
+
+```
+consumer
+→ insert link_click_events
+→ update short_links (per event)
+```
+
+After (aggregation)
+
+```
+consumer
+→ click event 수집
+→ shortCode 기준 counter 집계 (in-memory)
+
+flush job (interval / batch-size)
+→ aggregated counter read
+→ DB update (batch)
+```
+
+### Measured impact
+
+- hot key: async only 대비 **더 높은 RPS 구간에서도 안정성 향상**
+- latency: p95/p99 tail 안정화
+- DB query pattern: 이벤트 수 대비 `short_links update` 호출 수가 크게 감소
+
+### Interpretation
+
+핵심은 sync/async 자체보다 **write frequency와 hotspot 완화**다.
+
+즉,
+
+1. async 처리: request path에서 write 제거
+2. aggregation: write 횟수 자체 감소
+
+의 조합이 구조적 병목 완화에 가장 효과적이었다.
+
+---
