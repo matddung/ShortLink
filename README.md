@@ -2,19 +2,19 @@
 
 ## Purpose
 
-이 문서는 URL Shortener 서비스의 **redirect hot path 성능 특성**을 분석하기 위해 수행된 성능 테스트 결과를 정리한다.
+URL Shortener 서비스의 **redirect hot path 성능 특성**을 분석하기 위해 수행된 성능 테스트 결과를 정리한다.
 
 redirect 경로는 서비스에서 **가장 높은 QPS가 발생하는 read-heavy endpoint**이며,  
-특히 analytics write가 포함된 구조가 **처리량 ceiling에 어떤 영향을 미치는지** 확인하는 것이 본 테스트의 핵심 목적이다.
+특히 analytics write가 포함된 구조가 **처리량 ceiling에 어떤 영향을 미치는지** 확인하는 것이 테스트의 핵심 목적이다.
 
-본 실험에서 검증하고자 한 질문은 다음과 같다.
+실험에서 검증하고자 한 질문은 다음과 같다.
 
 1. read-only redirect 경로의 최대 처리량은 얼마인가
 2. redirect 경로에서 analytics write가 포함되면 처리량은 어떻게 변하는가
 3. redirect hot path에서 sync write가 구조적 병목이 되는가
 4. workload 패턴 (hot key / distributed / miss)에 따라 병목 특성이 어떻게 달라지는가
 
-이를 위해 redirect 경로를 다음 두 가지로 분리하였다.
+이를 위해 redirect 경로를 두 가지로 분리하였다.
 
 - **select-only redirect path (read-only baseline)**
 - **full redirect path (production-like path)**
@@ -38,8 +38,8 @@ redirect 경로는 서비스에서 **가장 높은 QPS가 발생하는 read-heav
 
 주의
 
-본 테스트는 로컬 환경에서 수행되었기 때문에 절대적인 성능 수치보다  
-**구조적 비교(structural comparison)**에 의미가 있다.
+테스트는 로컬 환경에서 수행되었기 때문에 절대적인 성능 수치보다  
+**구조적 비교(structural comparison)** 에 의미가 있다.
 
 ---
 
@@ -478,3 +478,4 @@ full-path ceiling ≈ 400 RPS
 2. counter aggregation
 3. redirect lookup cache 도입
 4. negative caching 적용
+

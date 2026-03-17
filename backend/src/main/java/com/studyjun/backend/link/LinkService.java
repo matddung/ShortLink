@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,16 +29,19 @@ public class LinkService {
 
     private final ShortLinkRepository shortLinkRepository;
     private final LinkClickEventRepository linkClickEventRepository;
+    private final RedirectClickOutboxRepository redirectClickOutboxRepository;
     private final SecureRandom secureRandom = new SecureRandom();
     private final String appBaseUrl;
     private final long anonymousExpirationDays;
 
     public LinkService(ShortLinkRepository shortLinkRepository,
                        LinkClickEventRepository linkClickEventRepository,
+                       RedirectClickOutboxRepository redirectClickOutboxRepository,
                        @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
                        @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
         this.linkClickEventRepository = linkClickEventRepository;
+        this.redirectClickOutboxRepository = redirectClickOutboxRepository;
         this.appBaseUrl = appBaseUrl;
         this.anonymousExpirationDays = anonymousExpirationDays;
     }
@@ -197,13 +202,14 @@ public class LinkService {
             throw new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
 
-        shortLink.increaseClickCount();
-        linkClickEventRepository.save(new LinkClickEvent(
-                shortLink,
-                Instant.now(),
+        Instant clickedAt = Instant.now();
+        redirectClickOutboxRepository.save(new RedirectClickOutbox(
+                shortLink.getId(),
+                clickedAt,
                 countryCode,
                 referrer,
-                visitorKey
+                visitorKey,
+                buildDedupeKey(shortLink.getId(), visitorKey, clickedAt)
         ));
 
         return shortLink.getOriginalUrl();
@@ -219,6 +225,17 @@ public class LinkService {
         }
 
         return shortLink.getOriginalUrl();
+    }
+
+    private String buildDedupeKey(Long shortLinkId, String visitorKey, Instant clickedAt) {
+        String raw = shortLinkId + "|" + (visitorKey == null ? "" : visitorKey) + "|" + clickedAt.toEpochMilli();
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(hash);
+        } catch (Exception ignored) {
+            return Integer.toHexString(raw.hashCode());
+        }
     }
 
     private boolean isAnonymousExpired(ShortLink shortLink) {
