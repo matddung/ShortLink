@@ -201,14 +201,6 @@ public class LinkService {
         }
 
         Instant clickedAt = Instant.now();
-        linkClickEventRepository.save(new LinkClickEvent(
-                shortLink,
-                clickedAt,
-                countryCode,
-                referrer,
-                visitorKey
-        ));
-        shortLink.increaseClickCount();
         clickEventPublisher.publish(new RedirectClickEventMessage(
                 UUID.randomUUID(),
                 DateTimeFormatter.ISO_INSTANT.format(clickedAt),

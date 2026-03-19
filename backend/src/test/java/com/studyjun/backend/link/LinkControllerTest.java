@@ -40,6 +40,12 @@ class LinkControllerTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    ShortLinkRepository shortLinkRepository;
+
+    @Autowired
+    LinkClickEventRepository linkClickEventRepository;
+
     @MockBean
     ClickEventPublisher clickEventPublisher;
 
@@ -217,22 +223,10 @@ class LinkControllerTest {
                 .andReturn();
 
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
-        String shortCode = created.path("shortCode").asText();
         String linkId = created.path("id").asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
-                        .header("CF-IPCountry", "KR")
-                        .header("Referer", "https://search.example.com/result")
-                        .header("User-Agent", "test-agent-1")
-                        .header("X-Forwarded-For", "203.0.113.10"))
-                .andExpect(status().isFound());
-
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
-                        .header("CF-IPCountry", "US")
-                        .header("Referer", "https://social.example.com/post")
-                        .header("User-Agent", "test-agent-2")
-                        .header("X-Forwarded-For", "198.51.100.20"))
-                .andExpect(status().isFound());
+        persistClickEvent(Long.valueOf(linkId), "KR", "https://search.example.com/result", "visitor-1");
+        persistClickEvent(Long.valueOf(linkId), "US", "https://social.example.com/post", "visitor-2");
 
         mockMvc.perform(get("/api/links/{id}/stats", linkId)
                         .header("Authorization", "Bearer " + accessToken))
@@ -275,7 +269,6 @@ class LinkControllerTest {
 
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
         String shortCode = created.path("shortCode").asText();
-        String linkId = created.path("id").asText();
 
         mockMvc.perform(get("/s/{shortCode}", shortCode)
                         .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8")
@@ -283,10 +276,9 @@ class LinkControllerTest {
                         .header("X-Forwarded-For", "203.0.113.30"))
                 .andExpect(status().isFound());
 
-        mockMvc.perform(get("/api/links/{id}/stats", linkId)
-                        .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.topCountries[0].country").value("KR"));
+        ArgumentCaptor<RedirectClickEventMessage> eventCaptor = ArgumentCaptor.forClass(RedirectClickEventMessage.class);
+        verify(clickEventPublisher, times(1)).publish(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().countryCode()).isEqualTo("KR");
     }
 
 
@@ -319,7 +311,6 @@ class LinkControllerTest {
 
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
         String shortCode = created.path("shortCode").asText();
-        String linkId = created.path("id").asText();
 
         mockMvc.perform(get("/s/{shortCode}", shortCode)
                         .header("Accept-Language", "ko")
@@ -327,10 +318,9 @@ class LinkControllerTest {
                         .header("X-Forwarded-For", "203.0.113.31"))
                 .andExpect(status().isFound());
 
-        mockMvc.perform(get("/api/links/{id}/stats", linkId)
-                        .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.topCountries[0].country").value("KR"));
+        ArgumentCaptor<RedirectClickEventMessage> eventCaptor = ArgumentCaptor.forClass(RedirectClickEventMessage.class);
+        verify(clickEventPublisher, times(1)).publish(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().countryCode()).isEqualTo("KR");
     }
 
     private void createAnonymous(String url, MockCookie owner) throws Exception {
@@ -339,5 +329,21 @@ class LinkControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LinkRequest.CreateAnonymousRequest(url))))
                 .andExpect(status().isOk());
+    }
+
+    private void persistClickEvent(Long linkId, String countryCode, String referrer, String visitorKey) {
+        ShortLink shortLink = shortLinkRepository.findById(linkId).orElseThrow();
+        shortLink.increaseClickCount();
+        shortLinkRepository.save(shortLink);
+        linkClickEventRepository.save(new LinkClickEvent(
+                UUID.randomUUID(),
+                shortLink,
+                Instant.now(),
+                UUID.randomUUID().toString(),
+                "test-suite",
+                countryCode,
+                referrer,
+                visitorKey
+        ));
     }
 }
