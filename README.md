@@ -336,13 +336,7 @@ sync analytics write
 
 ## 2. Row Hotspot은 성능을 크게 악화시킨다
 
-single hot key 상황에서는
-
-```
-update short_links
-```
-
-가 동일 row에 반복 수행되며 **write contention**이 발생한다.
+single hot key 상황에서는 update short_links가 동일 row에 반복 수행되며 **write contention**이 발생한다.
 
 ---
 
@@ -372,95 +366,6 @@ request
 
 ---
 
-# Optimization Strategy
-
-실험 결과를 기반으로 다음 최적화 전략을 도출하였다.
-
----
-
-## 1. Click Event Async Processing
-
-현재
-
-```
-request
-→ insert link_click_events
-→ redirect
-```
-
-개선
-
-```
-request
-→ event publish
-→ redirect
-
-consumer
-→ insert link_click_events
-```
-
-효과
-
-- redirect hot path write 제거
-- latency 감소
-- throughput 증가
-
----
-
-## 2. Counter Aggregation
-
-현재
-
-```
-update short_links set total_clicks
-```
-
-개선
-
-```
-Redis counter
-→ batch flush
-→ DB update
-```
-
-효과
-
-- row hotspot 완화
-- DB write 감소
-
----
-
-## 3. Redirect Lookup Cache
-
-```
-request
-→ Redis lookup
-→ redirect
-```
-
-효과
-
-- DB read 감소
-- hot key lookup 완화
-
----
-
-## 4. Negative Caching
-
-존재하지 않는 shortCode도 캐싱한다.
-
-```
-shortCode → NOT_FOUND
-TTL : 30~60s
-```
-
-효과
-
-- miss traffic DB 전파 차단
-- bot / scanner 트래픽 완화
-
----
-
 # Conclusion
 
 single hot key scenario 기준으로 다음 사실을 확인하였다.
@@ -470,7 +375,7 @@ select-only ceiling ≈ 1100 RPS
 full-path ceiling ≈ 400 RPS
 ```
 
-즉 redirect hot path에서 수행되는 **sync analytics write가 처리량 ceiling을 약 60% 이상 감소**시키는 것을 확인하였다.
+redirect hot path에서 수행되는 **sync analytics write가 처리량 ceiling을 약 60% 이상 감소**시키는 것을 확인하였다.
 
 따라서 redirect 경로 성능 개선의 우선 전략은 다음과 같다.
 
@@ -481,92 +386,3 @@ full-path ceiling ≈ 400 RPS
 
 ---
 
-## Phase 1. Async Analytics Write
-
-### What changed
-
-Before
-
-```
-request
-→ short_links select
-→ link_click_events insert
-→ short_links update
-→ redirect
-```
-
-After
-
-```
-request
-→ short_links select
-→ event publish
-→ redirect
-
-consumer
-→ link_click_events insert
-→ short_links update
-```
-
-### Measured impact
-
-- hot key: 약 **400 RPS → 500 RPS** (약 20~30% 개선)
-- random distributed: **1200+ RPS 구간 안정성 유지**
-- miss traffic: dropped iterations가 줄고 **select-only에 근접**
-
-### Interpretation
-
-Phase 1의 핵심 효과는 **request path에서 write를 제거**한 것이다.
-
-다만 write 자체가 사라진 것은 아니며, consumer에서 여전히
-
-```
-update short_links (per event)
-```
-
-를 수행하기 때문에 hot key에서는 ceiling이 남는다.
-
----
-
-## Phase 2. Counter Aggregation
-
-### What changed
-
-Before (async only)
-
-```
-consumer
-→ insert link_click_events
-→ update short_links (per event)
-```
-
-After (aggregation)
-
-```
-consumer
-→ click event 수집
-→ shortCode 기준 counter 집계 (in-memory)
-
-flush job (interval / batch-size)
-→ aggregated counter read
-→ DB update (batch)
-```
-
-### Measured impact
-
-- hot key: async only 대비 **더 높은 RPS 구간에서도 안정성 향상**
-- latency: p95/p99 tail 안정화
-- DB query pattern: 이벤트 수 대비 `short_links update` 호출 수가 크게 감소
-
-### Interpretation
-
-핵심은 sync/async 자체보다 **write frequency와 hotspot 완화**다.
-
-즉,
-
-1. async 처리: request path에서 write 제거
-2. aggregation: write 횟수 자체 감소
-
-의 조합이 구조적 병목 완화에 가장 효과적이었다.
-
----

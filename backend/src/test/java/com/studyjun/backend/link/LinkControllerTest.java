@@ -3,24 +3,31 @@ package com.studyjun.backend.link;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.studyjun.backend.auth.AuthRequest;
+import com.studyjun.backend.link.clickevent.ClickEventPublisher;
+import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockCookie;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -32,6 +39,9 @@ class LinkControllerTest {
 
     @Autowired
     ObjectMapper objectMapper;
+
+    @MockBean
+    ClickEventPublisher clickEventPublisher;
 
     @Test
     void anonymousShortenAndRedirectSuccess() throws Exception {
@@ -51,9 +61,19 @@ class LinkControllerTest {
                 .path("shortCode")
                 .asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode))
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("X-Request-Id", "req-anonymous-redirect"))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", "https://example.com/very/long/path"));
+
+        ArgumentCaptor<RedirectClickEventMessage> eventCaptor = ArgumentCaptor.forClass(RedirectClickEventMessage.class);
+        verify(clickEventPublisher, times(1)).publish(eventCaptor.capture());
+
+        RedirectClickEventMessage eventMessage = eventCaptor.getValue();
+        assertThat(eventMessage.eventId()).isNotNull();
+        assertThat(Instant.parse(eventMessage.clickedAt())).isNotNull();
+        assertThat(eventMessage.requestId()).isEqualTo("req-anonymous-redirect");
+        assertThat(eventMessage.source()).isEqualTo("shortlink-backend");
     }
 
     @Test
@@ -160,6 +180,13 @@ class LinkControllerTest {
         mockMvc.perform(get("/s/{shortCode}", shortCode))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", "https://dashboard.example.com/path"));
+
+        ArgumentCaptor<RedirectClickEventMessage> eventCaptor = ArgumentCaptor.forClass(RedirectClickEventMessage.class);
+        verify(clickEventPublisher, times(1)).publish(eventCaptor.capture());
+
+        RedirectClickEventMessage eventMessage = eventCaptor.getValue();
+        assertThat(eventMessage.requestId()).isNotBlank().isNotEqualTo("0");
+        assertThatCode(() -> UUID.fromString(eventMessage.requestId())).doesNotThrowAnyException();
     }
 
     @Test

@@ -1,6 +1,8 @@
 package com.studyjun.backend.link;
 
 import com.studyjun.backend.common.BusinessException;
+import com.studyjun.backend.link.clickevent.ClickEventPublisher;
+import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -12,11 +14,9 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,16 +27,19 @@ public class LinkService {
 
     private final ShortLinkRepository shortLinkRepository;
     private final LinkClickEventRepository linkClickEventRepository;
+    private final ClickEventPublisher clickEventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
     private final String appBaseUrl;
     private final long anonymousExpirationDays;
 
     public LinkService(ShortLinkRepository shortLinkRepository,
                        LinkClickEventRepository linkClickEventRepository,
+                       ClickEventPublisher clickEventPublisher,
                        @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
                        @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
         this.linkClickEventRepository = linkClickEventRepository;
+        this.clickEventPublisher = clickEventPublisher;
         this.appBaseUrl = appBaseUrl;
         this.anonymousExpirationDays = anonymousExpirationDays;
     }
@@ -188,7 +191,7 @@ public class LinkService {
     }
 
     @Transactional
-    public String resolveOriginalUrl(String shortCode, String countryCode, String referrer, String visitorKey) {
+    public String resolveOriginalUrl(String shortCode, String countryCode, String referrer, String visitorKey, String requestId, String source) {
         ShortLink shortLink = shortLinkRepository.findByShortCode(shortCode)
                 .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
@@ -206,6 +209,18 @@ public class LinkService {
                 visitorKey
         ));
         shortLink.increaseClickCount();
+        clickEventPublisher.publish(new RedirectClickEventMessage(
+                UUID.randomUUID(),
+                DateTimeFormatter.ISO_INSTANT.format(clickedAt),
+                requestId,
+                source,
+                shortLink.getId(),
+                shortLink.getShortCode(),
+                shortLink.getOriginalUrl(),
+                countryCode,
+                referrer,
+                visitorKey
+        ));
 
         return shortLink.getOriginalUrl();
     }

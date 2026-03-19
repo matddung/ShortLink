@@ -34,6 +34,7 @@ public class LinkController {
     private final String sameSite;
     private final UserRepository userRepository;
     private final long anonymousExpirationDays;
+    private final String analyticsSource;
     private final List<String> countryHeaderCandidates;
     private final Map<String, String> languageCountryFallbacks;
 
@@ -42,6 +43,7 @@ public class LinkController {
                           @Value("${app.auth.secure-cookie:true}") boolean secureCookie,
                           @Value("${app.auth.same-site:Lax}") String sameSite,
                           @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays,
+                          @Value("${spring.application.name:shortlink-backend}") String analyticsSource,
                           @Value("${app.geo.country-headers:CF-IPCountry,CloudFront-Viewer-Country,X-AppEngine-Country,X-Country-Code,X-Vercel-IP-Country,Fastly-Geo-Country-Code,X-Geo-Country}") String countryHeaders,
                           @Value("${app.geo.language-country-fallbacks:ko:KR,ja:JP,en:US}") String languageCountryFallbacks) {
         this.linkService = linkService;
@@ -49,6 +51,7 @@ public class LinkController {
         this.secureCookie = secureCookie;
         this.sameSite = sameSite;
         this.anonymousExpirationDays = anonymousExpirationDays;
+        this.analyticsSource = analyticsSource;
         this.countryHeaderCandidates = List.of(countryHeaders.split(","))
                 .stream()
                 .map(String::trim)
@@ -122,8 +125,9 @@ public class LinkController {
         String countryCode = resolveCountryCode(request);
         String referrer = resolveReferrer(request);
         String visitorKey = buildVisitorKey(request);
+        String requestId = resolveRequestId(request);
 
-        String originalUrl = linkService.resolveOriginalUrl(shortCode, countryCode, referrer, visitorKey);
+        String originalUrl = linkService.resolveOriginalUrl(shortCode, countryCode, referrer, visitorKey, requestId, analyticsSource);
         return ResponseEntity.status(302)
                 .header(HttpHeaders.LOCATION, URI.create(originalUrl).toString())
                 .build();
@@ -147,6 +151,26 @@ public class LinkController {
             return UUID.randomUUID().toString();
         }
         return ownerKey;
+    }
+
+    private String resolveRequestId(HttpServletRequest request) {
+        String requestIdHeader = request.getHeader("X-Request-Id");
+        if (isUsableRequestId(requestIdHeader)) {
+            return requestIdHeader;
+        }
+
+        String requestId = request.getRequestId();
+        if (isUsableRequestId(requestId)) {
+            return requestId;
+        }
+
+        return UUID.randomUUID().toString();
+    }
+
+    private boolean isUsableRequestId(String requestId) {
+        return requestId != null
+                && !requestId.isBlank()
+                && !"0".equals(requestId.trim());
     }
 
     private String createOwnerCookie(String ownerKey) {
