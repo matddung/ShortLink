@@ -207,8 +207,6 @@ class LinkControllerTest {
                         .header("X-Forwarded-For", "198.51.100.20"))
                 .andExpect(status().isFound());
 
-        waitForAnalyticsProcessing();
-
         mockMvc.perform(get("/api/links/{id}/stats", linkId)
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
@@ -258,8 +256,6 @@ class LinkControllerTest {
                         .header("X-Forwarded-For", "203.0.113.30"))
                 .andExpect(status().isFound());
 
-        waitForAnalyticsProcessing();
-
         mockMvc.perform(get("/api/links/{id}/stats", linkId)
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
@@ -304,16 +300,10 @@ class LinkControllerTest {
                         .header("X-Forwarded-For", "203.0.113.31"))
                 .andExpect(status().isFound());
 
-        waitForAnalyticsProcessing();
-
         mockMvc.perform(get("/api/links/{id}/stats", linkId)
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.topCountries[0].country").value("KR"));
-    }
-
-    private void waitForAnalyticsProcessing() throws InterruptedException {
-        Thread.sleep(1200L);
     }
 
     private void createAnonymous(String url, MockCookie owner) throws Exception {

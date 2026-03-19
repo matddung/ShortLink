@@ -7,6 +7,11 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 jwt:
   access-token-expiration-ms: 60000
@@ -18,6 +23,3 @@ app:
     same-site: Lax
   cors:
     allowed-origins: http://localhost:3000
-  analytics:
-    outbox:
-      fixed-delay-ms: 100
