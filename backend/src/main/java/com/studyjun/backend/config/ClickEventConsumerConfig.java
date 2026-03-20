@@ -14,7 +14,7 @@ import org.springframework.util.backoff.FixedBackOff;
 
 @Slf4j
 @Configuration
-@ConditionalOnProperty(name = "app.analytics.kafka.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.analytics.kafka.consumer-enabled", havingValue = "true")
 public class ClickEventConsumerConfig {
 
     @Bean

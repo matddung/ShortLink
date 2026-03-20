@@ -149,6 +149,34 @@ class LinkControllerTest {
                 .andExpect(jsonPath("$.data.length()").value(2));
     }
 
+    @Test
+    void repeatedRedirectWithSameRequestIdPublishesSameEventId() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/api/links/anonymous")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LinkRequest.CreateAnonymousRequest("https://example.com/idempotent/path"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String shortCode = objectMapper.readTree(createResult.getResponse().getContentAsString())
+                .path("data")
+                .path("shortCode")
+                .asText();
+
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("X-Request-Id", "req-idempotent-redirect"))
+                .andExpect(status().isFound());
+
+        mockMvc.perform(get("/s/{shortCode}", shortCode)
+                        .header("X-Request-Id", "req-idempotent-redirect"))
+                .andExpect(status().isFound());
+
+        ArgumentCaptor<RedirectClickEventMessage> eventCaptor = ArgumentCaptor.forClass(RedirectClickEventMessage.class);
+        verify(clickEventPublisher, times(2)).publish(eventCaptor.capture());
+
+        assertThat(eventCaptor.getAllValues())
+                .extracting(RedirectClickEventMessage::eventId)
+                .containsOnly(eventCaptor.getAllValues().get(0).eventId());
+    }
 
     @Test
     void authenticatedUserCanCreateLinkAndRedirect() throws Exception {

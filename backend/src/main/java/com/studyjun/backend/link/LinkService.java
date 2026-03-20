@@ -202,7 +202,7 @@ public class LinkService {
 
         Instant clickedAt = Instant.now();
         clickEventPublisher.publish(new RedirectClickEventMessage(
-                UUID.randomUUID(),
+                buildEventId(shortLink.getId(), requestId),
                 DateTimeFormatter.ISO_INSTANT.format(clickedAt),
                 requestId,
                 source,
@@ -215,6 +215,10 @@ public class LinkService {
         ));
 
         return shortLink.getOriginalUrl();
+    }
+
+    private UUID buildEventId(Long shortLinkId, String requestId) {
+        return UUID.nameUUIDFromBytes((shortLinkId + ":" + requestId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     @Transactional(readOnly = true)

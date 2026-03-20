@@ -23,3 +23,8 @@ app:
     same-site: Lax
   cors:
     allowed-origins: http://localhost:3000
+  analytics:
+    kafka:
+      producer-enabled: true
+      consumer-enabled: true
+      topic: shortlink.redirect.click.v1

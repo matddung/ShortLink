@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "app.analytics.kafka.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.analytics.kafka.consumer-enabled", havingValue = "true")
 public class KafkaClickEventConsumer {
 
     private final ObjectMapper objectMapper;

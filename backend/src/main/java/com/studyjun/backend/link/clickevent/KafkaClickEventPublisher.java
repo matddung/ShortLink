@@ -1,9 +1,11 @@
 package com.studyjun.backend.link.clickevent;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 
 @Slf4j
+@ConditionalOnProperty(name = "app.analytics.kafka.producer-enabled", havingValue = "true")
 public class KafkaClickEventPublisher implements ClickEventPublisher {
 
     private final KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate;
