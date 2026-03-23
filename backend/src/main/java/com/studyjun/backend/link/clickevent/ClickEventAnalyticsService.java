@@ -18,11 +18,14 @@ public class ClickEventAnalyticsService {
 
     private final ShortLinkRepository shortLinkRepository;
     private final LinkClickEventRepository linkClickEventRepository;
+    private final ClickCountBufferService clickCountBufferService;
 
     public ClickEventAnalyticsService(ShortLinkRepository shortLinkRepository,
-                                      LinkClickEventRepository linkClickEventRepository) {
+                                      LinkClickEventRepository linkClickEventRepository,
+                                      ClickCountBufferService clickCountBufferService) {
         this.shortLinkRepository = shortLinkRepository;
         this.linkClickEventRepository = linkClickEventRepository;
+        this.clickCountBufferService = clickCountBufferService;
     }
 
     @Transactional
@@ -52,9 +55,9 @@ public class ClickEventAnalyticsService {
                 message.visitorKey()
         ));
 
-        shortLink.increaseClickCount();
-        log.info("Persisted click event. eventId={}, shortCode={}, requestId={}, totalClicks={}",
-                message.eventId(), message.shortCode(), message.requestId(), shortLink.getTotalClicks());
+        long bufferedCount = clickCountBufferService.increment(shortLink.getId());
+        log.info("Persisted click event and buffered aggregate click increment. eventId={}, shortCode={}, requestId={}, bufferedCount={}",
+                message.eventId(), message.shortCode(), message.requestId(), bufferedCount);
         return ProcessingResult.INSERTED;
     }
 

@@ -18,7 +18,7 @@ class ClickEventPublisherConfigTest {
     @Test
     void defaultsToNoopPublisher() {
         contextRunner
-                .withPropertyValues("app.analytics.kafka.enabled=false")
+                .withPropertyValues("app.analytics.kafka.producer-enabled=false")
                 .run(context -> {
                     assertThat(context).hasSingleBean(ClickEventPublisher.class);
                     assertThat(context.getBean(ClickEventPublisher.class)).isInstanceOf(NoopClickEventPublisher.class);
@@ -30,7 +30,7 @@ class ClickEventPublisherConfigTest {
         contextRunner
                 .withBean("kafkaTemplate", KafkaTemplate.class, () -> mock(KafkaTemplate.class))
                 .withPropertyValues(
-                        "app.analytics.kafka.enabled=true",
+                        "app.analytics.kafka.producer-enabled=true",
                         "app.analytics.kafka.topic=test-shortlink.redirect.click.v1"
                 )
                 .run(context -> {

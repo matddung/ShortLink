@@ -34,7 +34,7 @@ public class KafkaClickEventConsumer {
                         @Header(KafkaHeaders.RECEIVED_PARTITION) int partition) {
         RedirectClickEventMessage message = deserialize(payload);
 
-        log.info("Consumed click event. topic={}, partition={}, offset={}, key={}, eventId={}, shortCode={}, requestId={}",
+        log.info("Consumed click event for buffered analytics processing. topic={}, partition={}, offset={}, key={}, eventId={}, shortCode={}, requestId={}",
                 topic, partition, offset, key, message.eventId(), message.shortCode(), message.requestId());
 
         clickEventAnalyticsService.process(message);
