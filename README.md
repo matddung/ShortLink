@@ -33,7 +33,6 @@ redirect 경로는 서비스에서 **가장 높은 QPS가 발생하는 read-heav
 | JVM | OpenJDK 17 |
 | PostgreSQL | 17 |
 | Connection Pool | HikariCP (max pool size: 10) |
-| Redis | 없음 |
 | Test Location | 로컬 단일 머신 |
 
 주의
@@ -421,6 +420,109 @@ p99 ≈ 1.15 ms
 문제: write가 hot path에 있음
 해결: Kafka로 write 분리
 결과: 400 → 1200 RPS (3배 증가)
+```
+
+---
+
+# Phase 2. counter aggregation (Redis INCR)
+
+## Why Redis INCR
+
+Phase 1에서 Kafka를 통해 analytics write를 async로 분리했지만, 여전히 다음 문제가 남는다.
+
+- `short_links total_clicks update`가 동일 row에 집중됨
+- single hot key 상황에서 write contention 지속
+- request 수에 비례하여 DB update가 발생 (write amplification)
+
+즉
+
+```
+async 처리 이후에도
+→ DB update hotspot은 여전히 존재
+→ throughput ceiling의 잠재 병목
+```
+
+이를 해결하기 위해 per-request DB update를 제거하고, **Redis INCR 기반 counter aggregation 전략**을 도입하였다.
+
+---
+
+## Trade-off
+
+- strong consistency → eventual consistency로 변경
+- DB로 flush되기 전에 Redis에만 머물던 aggregate count는 유실될 수 있음
+- flush 주기에 따라 DB 값이 지연 반영됨
+- aggregator worker 운영 필요
+
+---
+
+## Approach
+
+`total_clicks`를 즉시 DB에 반영하지 않고 Redis에 누적한 뒤, batch로 DB에 반영한다.
+
+### Request Path
+
+```
+request
+→ short_links select
+→ Kafka produce
+→ redirect
+```
+
+### Async Aggregation Path
+
+```
+[aggregator worker]
+
+Kafka consume
+→ link_click_events insert
+→ Redis INCR
+```
+
+### Flush Worker
+
+```
+Redis counter read/getDel
+→ aggregated `short_links total_clicks` update
+```
+
+---
+
+## Result
+
+### Single Hot Key
+
+| metric | Phase 1 | Phase 2 |
+|--------|--------|--------|
+| ceiling RPS | ~1200 | ~1500+ |
+| p95 latency | ~0.5 ms | ~0.4 ms |
+
+실측 결과
+
+```
+http_reqs ≈ 1500+/s
+p95 ≈ ~0.4 ms
+p99 ≈ ~1 ms 이하
+```
+
+핵심 변화
+
+```
+Redis가 per-request aggregate update를 흡수하고, flush worker가 주기적으로 집계 반영
+```
+
+---
+
+## Summary
+
+```
+문제: DB update hotspot + write amplification
+
+해결: Redis INCR 기반 counter aggregation 도입
+
+결과:
+1200 → 1500+ RPS
+latency 추가 감소
+DB write pressure 감소
 ```
 
 ---
