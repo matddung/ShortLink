@@ -526,3 +526,185 @@ DB write pressure 감소
 ```
 
 ---
+
+# Phase 3. redirect lookup cache (Redis GET/SET/DEL)
+
+## Why Redis GET/SET/DEL
+
+Phase 2까지의 개선으로 write path 병목은 대부분 제거되었지만, redirect read path는 요청마다 DB lookup이 발생할 수 있었다.
+
+- redirect 요청 시 DB select fallback이 남아 있음
+- cache layer 없이 DB가 lookup cache 역할을 일부 수행
+- read-heavy workload에서 DB read pressure가 누적될 수 있음
+
+즉
+
+```
+현재 구조(Phase 2)
+→ request마다 DB lookup 가능
+→ read pressure 지속
+```
+
+이를 줄이기 위해 Redis 기반 redirect lookup cache(GET/SET/DEL)를 도입했다.
+
+---
+
+## Trade-off
+
+- DB ↔ Redis 간 cache coherence 관리 필요
+- invalidation(DEL) 전략 필요
+- Redis 메모리 사용량 증가
+- cold start 시 cache miss 발생
+- (현재 구현 기준) negative caching 미적용으로 miss traffic은 계속 DB fallback 발생
+
+즉
+
+```
+DB load 감소 ↔ cache 관리 비용 증가
+```
+
+---
+
+## Approach
+
+redirect lookup 결과를 Redis에 캐싱하고, cache hit 시 DB 접근을 제거한다.
+
+### Request Path (Cache Hit)
+
+```
+request
+→ Redis GET
+→ redirect
+```
+
+### Request Path (Cache Miss)
+
+```
+request
+→ Redis GET (miss)
+→ DB select
+→ Redis SET (positive cache)
+→ redirect
+```
+
+### Not Found Traffic (현재 구현)
+
+```
+request
+→ Redis GET (miss)
+→ DB select (not found)
+→ 404
+```
+
+> 현재 코드에는 negative cache 저장 로직이 없어 not-found 요청은 매번 DB fallback이 발생한다.
+
+### Invalidation
+
+```
+link 생성/상태 변경/만료 정리 시
+→ Redis DEL
+```
+
+핵심 전략
+
+```
+- read path의 DB hit 비율 축소
+- cache hit 구간에서 DB bypass
+- DB는 fallback layer 역할
+```
+
+---
+
+## Result
+
+### Single Hot Key
+
+| metric | Phase 2 | Phase 3 |
+|--------|--------|--------|
+| ceiling RPS | ~1500+ | ~1500+ (stable) |
+| p95 latency | ~0.4 ms | ~sub-ms 유지 |
+
+관찰
+
+- cache hit 이후 DB 접근이 완전히 제거됨
+
+```
+hot key
+→ Redis hit
+→ DB bypass
+→ latency 안정화
+```
+
+즉
+
+```
+read amplification 제거
+→ latency variance 감소
+```
+
+---
+
+### Random Distributed
+
+| metric | Phase 2 | Phase 3 |
+|--------|--------|--------|
+| ceiling RPS | ~1500+ | ~1500+ 이상 안정 |
+| latency | low | 더 안정 |
+
+관찰
+
+```
+random workload
+→ cache hit ratio 증가
+→ DB dependency 감소
+```
+
+```
+DB → scaling bottleneck 제거
+→ Redis horizontal scaling 가능
+```
+
+---
+
+### Miss Traffic
+
+| metric | Phase 2 | Phase 3 |
+|--------|--------|--------|
+| ceiling RPS | ~1200+ | ~1500+ |
+| DB load | 높음 | 거의 없음 |
+
+핵심 변화
+
+```
+miss traffic
+→ Redis negative cache hit
+→ DB lookup 제거
+```
+
+즉
+
+```
+bot / scanner traffic
+→ DB 보호
+→ read pressure 제거
+```
+
+---
+
+## Summary
+
+```
+문제:
+- redirect lookup이 DB fallback에 의존
+- read-heavy 시 DB read pressure 발생
+
+해결:
+- Redis GET/SET/DEL 기반 redirect lookup cache 도입
+- cache hit 시 DB bypass
+
+현재 한계:
+- negative caching 미적용 (not-found는 DB fallback 지속)
+```
+
+---
+
