@@ -3,6 +3,9 @@ package com.studyjun.backend.link;
 import com.studyjun.backend.common.BusinessException;
 import com.studyjun.backend.link.clickevent.ClickEventPublisher;
 import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class LinkService {
 
@@ -28,6 +32,11 @@ public class LinkService {
     private final ShortLinkRepository shortLinkRepository;
     private final LinkClickEventRepository linkClickEventRepository;
     private final ClickEventPublisher clickEventPublisher;
+    private final RedirectLookupCacheRepository redirectLookupCacheRepository;
+    private final RedirectLookupPolicy redirectLookupPolicy;
+    private final Counter redirectCacheHitCounter;
+    private final Counter redirectCacheMissCounter;
+    private final Counter redirectDbFallbackCounter;
     private final SecureRandom secureRandom = new SecureRandom();
     private final String appBaseUrl;
     private final long anonymousExpirationDays;
@@ -35,11 +44,19 @@ public class LinkService {
     public LinkService(ShortLinkRepository shortLinkRepository,
                        LinkClickEventRepository linkClickEventRepository,
                        ClickEventPublisher clickEventPublisher,
+                       RedirectLookupCacheRepository redirectLookupCacheRepository,
+                       RedirectLookupPolicy redirectLookupPolicy,
+                       MeterRegistry meterRegistry,
                        @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
                        @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
         this.linkClickEventRepository = linkClickEventRepository;
         this.clickEventPublisher = clickEventPublisher;
+        this.redirectLookupCacheRepository = redirectLookupCacheRepository;
+        this.redirectLookupPolicy = redirectLookupPolicy;
+        this.redirectCacheHitCounter = meterRegistry.counter("redirect.lookup.cache.hit.count");
+        this.redirectCacheMissCounter = meterRegistry.counter("redirect.lookup.cache.miss.count");
+        this.redirectDbFallbackCounter = meterRegistry.counter("redirect.lookup.db.fallback.count");
         this.appBaseUrl = appBaseUrl;
         this.anonymousExpirationDays = anonymousExpirationDays;
     }
@@ -51,6 +68,7 @@ public class LinkService {
         String shortCode = generateUniqueShortCode();
         Instant anonymousExpiresAt = Instant.now().plus(anonymousExpirationDays, ChronoUnit.DAYS);
         ShortLink saved = shortLinkRepository.save(new ShortLink(originalUrl, shortCode, ownerKey, anonymousExpiresAt));
+        invalidateRedirectLookupCache(saved.getShortCode());
 
         return toResponse(saved);
     }
@@ -64,6 +82,7 @@ public class LinkService {
         shortLink.claimToUser(userId);
 
         ShortLink saved = shortLinkRepository.save(shortLink);
+        invalidateRedirectLookupCache(saved.getShortCode());
         return toResponse(saved);
     }
 
@@ -76,6 +95,7 @@ public class LinkService {
                 .toList();
         if (!expired.isEmpty()) {
             shortLinkRepository.deleteAll(expired);
+            invalidateRedirectLookupCaches(expired);
         }
 
         return links.stream()
@@ -102,15 +122,22 @@ public class LinkService {
 
         if (!expiredLinks.isEmpty()) {
             shortLinkRepository.deleteAll(expiredLinks);
+            expiredLinks.forEach(link -> invalidateRedirectLookupCache(link.getShortCode()));
         }
 
-        validLinks.forEach(link -> link.claimToUser(userId));
+        validLinks.forEach(link -> {
+            link.claimToUser(userId);
+            invalidateRedirectLookupCache(link.getShortCode());
+        });
         return validLinks.size();
     }
 
     @Transactional
     public long purgeExpiredAnonymousLinks() {
-        return shortLinkRepository.deleteByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(Instant.now());
+        Instant threshold = Instant.now();
+        List<ShortLink> expiredLinks = shortLinkRepository.findAllByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
+        expiredLinks.forEach(link -> invalidateRedirectLookupCache(link.getShortCode()));
+        return shortLinkRepository.deleteByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
     }
 
     @Transactional
@@ -192,29 +219,23 @@ public class LinkService {
 
     @Transactional
     public String resolveOriginalUrl(String shortCode, String countryCode, String referrer, String visitorKey, String requestId, String source) {
-        ShortLink shortLink = shortLinkRepository.findByShortCode(shortCode)
-                .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-
-        if (isAnonymousExpired(shortLink)) {
-            shortLinkRepository.delete(shortLink);
-            throw new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
-        }
+        ResolvedRedirectTarget redirectTarget = resolveRedirectableTarget(shortCode);
 
         Instant clickedAt = Instant.now();
         clickEventPublisher.publish(new RedirectClickEventMessage(
-                buildEventId(shortLink.getId(), requestId),
+                buildEventId(redirectTarget.shortLinkId(), requestId),
                 DateTimeFormatter.ISO_INSTANT.format(clickedAt),
                 requestId,
                 source,
-                shortLink.getId(),
-                shortLink.getShortCode(),
-                shortLink.getOriginalUrl(),
+                redirectTarget.shortLinkId(),
+                shortCode,
+                redirectTarget.originalUrl(),
                 countryCode,
                 referrer,
                 visitorKey
         ));
 
-        return shortLink.getOriginalUrl();
+        return redirectTarget.originalUrl();
     }
 
     private UUID buildEventId(Long shortLinkId, String requestId) {
@@ -223,20 +244,65 @@ public class LinkService {
 
     @Transactional(readOnly = true)
     public String resolveOriginalUrlSelectOnly(String shortCode) {
+        return resolveRedirectableTarget(shortCode).originalUrl();
+    }
+
+    private ResolvedRedirectTarget resolveRedirectableTarget(String shortCode) {
+        Instant now = Instant.now();
+        Optional<RedirectLookupCacheRepository.RedirectLookupCacheEntry> cached = redirectLookupCacheRepository.findByShortCode(shortCode);
+
+        if (cached.isPresent() && redirectLookupPolicy.evaluate(cached.get(), now) == RedirectLookupState.REDIRECTABLE) {
+            redirectCacheHitCounter.increment();
+            log.info("Redirect lookup cache hit. shortCode={}", shortCode);
+            RedirectLookupCacheRepository.RedirectLookupCacheEntry entry = cached.get();
+            return new ResolvedRedirectTarget(entry.shortLinkId(), entry.originalUrl());
+        }
+
+        if (cached.isPresent()) {
+            invalidateRedirectLookupCache(shortCode);
+        }
+
+        redirectCacheMissCounter.increment();
+        log.info("Redirect lookup cache miss. shortCode={}", shortCode);
+        redirectDbFallbackCounter.increment();
+        log.info("Redirect lookup DB fallback. shortCode={}", shortCode);
+
         ShortLink shortLink = shortLinkRepository.findByShortCode(shortCode)
                 .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-        if (isAnonymousExpired(shortLink)) {
+        if (redirectLookupPolicy.evaluate(shortLink, now) == RedirectLookupState.EXPIRED) {
+            shortLinkRepository.delete(shortLink);
+            invalidateRedirectLookupCache(shortCode);
             throw new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
 
-        return shortLink.getOriginalUrl();
+        redirectLookupCacheRepository.save(
+                shortCode,
+                new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
+                        shortLink.getId(),
+                        shortLink.getOriginalUrl(),
+                        shortLink.getAnonymousExpiresAt()
+                )
+        );
+
+        return new ResolvedRedirectTarget(shortLink.getId(), shortLink.getOriginalUrl());
+    }
+
+    private void invalidateRedirectLookupCache(String shortCode) {
+        redirectLookupCacheRepository.delete(shortCode);
+    }
+
+    private void invalidateRedirectLookupCaches(List<ShortLink> shortLinks) {
+        shortLinks.stream()
+                .map(ShortLink::getShortCode)
+                .forEach(this::invalidateRedirectLookupCache);
+    }
+
+    private record ResolvedRedirectTarget(Long shortLinkId, String originalUrl) {
     }
 
     private boolean isAnonymousExpired(ShortLink shortLink) {
-        return shortLink.getOwnerUserId() == null
-                && shortLink.getAnonymousExpiresAt() != null
-                && shortLink.getAnonymousExpiresAt().isBefore(Instant.now());
+        return redirectLookupPolicy.evaluate(shortLink, Instant.now()) == RedirectLookupState.EXPIRED;
     }
 
     private LinkResponse.ShortLinkResponse toResponse(ShortLink shortLink) {

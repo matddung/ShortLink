@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -53,6 +54,7 @@ class ClickEventAnalyticsServiceTest {
         );
         when(clickCountBufferService.increment(shortLink.getId())).thenReturn(1L);
         when(clickCountBufferService.findBufferedKeys()).thenReturn(Set.of("analytics:click-count:" + shortLink.getId()));
+        when(clickCountBufferService.tryAcquireFlushLock(anyString(), any(Duration.class))).thenReturn(true);
         when(clickCountBufferService.extractShortLinkId("analytics:click-count:" + shortLink.getId())).thenReturn(shortLink.getId());
         when(clickCountBufferService.consumeBufferedCount("analytics:click-count:" + shortLink.getId())).thenReturn(1L);
 
@@ -83,6 +85,7 @@ class ClickEventAnalyticsServiceTest {
                 "visitor-analytics-2"
         );
         when(clickCountBufferService.increment(anyLong())).thenReturn(1L);
+        when(clickCountBufferService.tryAcquireFlushLock(anyString(), any(Duration.class))).thenReturn(true);
         when(clickCountBufferService.findBufferedKeys()).thenReturn(Set.of("analytics:click-count:" + shortLink.getId()));
         when(clickCountBufferService.extractShortLinkId("analytics:click-count:" + shortLink.getId())).thenReturn(shortLink.getId());
         when(clickCountBufferService.consumeBufferedCount("analytics:click-count:" + shortLink.getId())).thenReturn(1L);

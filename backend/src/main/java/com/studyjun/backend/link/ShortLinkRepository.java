@@ -20,6 +20,8 @@ public interface ShortLinkRepository extends JpaRepository<ShortLink, Long> {
 
     List<ShortLink> findAllByOwnerUserIdOrderByCreatedAtDesc(Long ownerUserId);
 
+    List<ShortLink> findAllByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(Instant threshold);
+
     long deleteByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(Instant threshold);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

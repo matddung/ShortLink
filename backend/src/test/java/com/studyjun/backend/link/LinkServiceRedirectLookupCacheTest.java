@@ -1,0 +1,114 @@
+package com.studyjun.backend.link;
+
+import com.studyjun.backend.common.BusinessException;
+import com.studyjun.backend.link.clickevent.ClickEventPublisher;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.Instant;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class LinkServiceRedirectLookupCacheTest {
+
+    @Mock
+    private ShortLinkRepository shortLinkRepository;
+
+    @Mock
+    private LinkClickEventRepository linkClickEventRepository;
+
+    @Mock
+    private ClickEventPublisher clickEventPublisher;
+
+    @Mock
+    private RedirectLookupCacheRepository redirectLookupCacheRepository;
+
+    private RedirectLookupPolicy redirectLookupPolicy;
+    private SimpleMeterRegistry meterRegistry;
+    private LinkService linkService;
+
+    @BeforeEach
+    void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
+        redirectLookupPolicy = new RedirectLookupPolicy();
+        linkService = new LinkService(
+                shortLinkRepository,
+                linkClickEventRepository,
+                clickEventPublisher,
+                redirectLookupCacheRepository,
+                redirectLookupPolicy,
+                meterRegistry,
+                "http://localhost:8080",
+                30
+        );
+    }
+
+    @Test
+    void resolveOriginalUrlSelectOnly_usesCacheFirstWithoutDbFallback() {
+        when(redirectLookupCacheRepository.findByShortCode("cache01"))
+                .thenReturn(Optional.of(new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
+                        101L,
+                        "https://example.com/cached",
+                        null
+                )));
+
+        String originalUrl = linkService.resolveOriginalUrlSelectOnly("cache01");
+
+        assertThat(originalUrl).isEqualTo("https://example.com/cached");
+        verifyNoInteractions(shortLinkRepository);
+        assertThat(meterRegistry.get("redirect.lookup.cache.hit.count").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("redirect.lookup.cache.miss.count").counter().count()).isZero();
+        assertThat(meterRegistry.get("redirect.lookup.db.fallback.count").counter().count()).isZero();
+    }
+
+    @Test
+    void resolveOriginalUrlSelectOnly_fallsBackToDbOnCacheMissAndWritesCache() {
+        ShortLink shortLink = new ShortLink("https://example.com/db", "cache02", null, null);
+        ReflectionTestUtils.setField(shortLink, "id", 202L);
+
+        when(redirectLookupCacheRepository.findByShortCode("cache02")).thenReturn(Optional.empty());
+        when(shortLinkRepository.findByShortCode("cache02")).thenReturn(Optional.of(shortLink));
+
+        String originalUrl = linkService.resolveOriginalUrlSelectOnly("cache02");
+
+        assertThat(originalUrl).isEqualTo("https://example.com/db");
+        verify(shortLinkRepository).findByShortCode("cache02");
+        verify(redirectLookupCacheRepository).save(eq("cache02"), any(RedirectLookupCacheRepository.RedirectLookupCacheEntry.class));
+        assertThat(meterRegistry.get("redirect.lookup.cache.hit.count").counter().count()).isZero();
+        assertThat(meterRegistry.get("redirect.lookup.cache.miss.count").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("redirect.lookup.db.fallback.count").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void resolveOriginalUrlSelectOnly_deletesExpiredLinkAndThrowsNotFound() {
+        ShortLink expired = new ShortLink(
+                "https://example.com/expired",
+                "cache03",
+                "owner",
+                Instant.now().minusSeconds(60)
+        );
+        ReflectionTestUtils.setField(expired, "id", 303L);
+
+        when(redirectLookupCacheRepository.findByShortCode("cache03")).thenReturn(Optional.empty());
+        when(shortLinkRepository.findByShortCode("cache03")).thenReturn(Optional.of(expired));
+
+        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache03"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("링크를 찾을 수 없습니다.");
+
+        verify(shortLinkRepository).delete(expired);
+        verify(redirectLookupCacheRepository).delete("cache03");
+        verify(redirectLookupCacheRepository, never()).save(eq("cache03"), any());
+    }
+}
