@@ -65,7 +65,8 @@ class LinkServiceRedirectLookupCacheTest {
                 .thenReturn(Optional.of(new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
                         101L,
                         "https://example.com/cached",
-                        null
+                        null,
+                        true
                 )));
 
         String originalUrl = linkService.resolveOriginalUrlSelectOnly("cache01");
@@ -147,5 +148,24 @@ class LinkServiceRedirectLookupCacheTest {
 
         verify(negativeRedirectLookupCacheRepository).save("cache05", NegativeRedirectReason.NOT_FOUND);
         verify(redirectLookupCacheRepository, never()).save(eq("cache05"), any());
+    }
+
+
+    @Test
+    void resolveOriginalUrlSelectOnly_savesInactiveNegativeCacheWhenLinkIsInactive() {
+        ShortLink inactive = new ShortLink("https://example.com/inactive", "cache06", null, null);
+        ReflectionTestUtils.setField(inactive, "id", 606L);
+        inactive.deactivate();
+
+        when(negativeRedirectLookupCacheRepository.findByShortCode("cache06")).thenReturn(Optional.empty());
+        when(redirectLookupCacheRepository.findByShortCode("cache06")).thenReturn(Optional.empty());
+        when(shortLinkRepository.findByShortCode("cache06")).thenReturn(Optional.of(inactive));
+
+        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache06"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("링크를 찾을 수 없습니다.");
+
+        verify(negativeRedirectLookupCacheRepository).save("cache06", NegativeRedirectReason.INACTIVE);
+        verify(shortLinkRepository, never()).delete(any());
     }
 }

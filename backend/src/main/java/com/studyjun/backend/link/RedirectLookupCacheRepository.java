@@ -81,6 +81,6 @@ public class RedirectLookupCacheRepository {
         return KEY_PREFIX + shortCode;
     }
 
-    public record RedirectLookupCacheEntry(Long shortLinkId, String originalUrl, Instant anonymousExpiresAt) {
+    public record RedirectLookupCacheEntry(Long shortLinkId, String originalUrl, Instant anonymousExpiresAt, Boolean active) {
     }
 }

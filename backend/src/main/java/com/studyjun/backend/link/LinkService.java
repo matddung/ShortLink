@@ -286,7 +286,14 @@ public class LinkService {
 
         ShortLink shortLink = shortLinkOptional.get();
 
-        if (redirectLookupPolicy.evaluate(shortLink, now) == RedirectLookupState.EXPIRED) {
+        RedirectLookupState redirectLookupState = redirectLookupPolicy.evaluate(shortLink, now);
+        if (redirectLookupState == RedirectLookupState.INACTIVE) {
+            invalidateRedirectLookupCache(shortCode);
+            negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.INACTIVE);
+            throw linkNotFoundException();
+        }
+
+        if (redirectLookupState == RedirectLookupState.EXPIRED) {
             shortLinkRepository.delete(shortLink);
             invalidateRedirectLookupCache(shortCode);
             negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.EXPIRED);
@@ -298,7 +305,8 @@ public class LinkService {
                 new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
                         shortLink.getId(),
                         shortLink.getOriginalUrl(),
-                        shortLink.getAnonymousExpiresAt()
+                        shortLink.getAnonymousExpiresAt(),
+                        shortLink.isActive()
                 )
         );
         negativeRedirectLookupCacheRepository.delete(shortCode);
@@ -335,7 +343,7 @@ public class LinkService {
                 shortLink.getShortCode(),
                 buildShortUrl(shortLink.getShortCode()),
                 shortLink.getCreatedAt(),
-                "active",
+                shortLink.isActive() ? "active" : "inactive",
                 shortLink.getTotalClicks(),
                 shortLink.getOwnerUserId() == null ? "anonymous" : String.valueOf(shortLink.getOwnerUserId())
         );

@@ -35,6 +35,9 @@ public class ShortLink {
     @Column
     private Instant anonymousExpiresAt;
 
+    @Column(nullable = false)
+    private boolean active;
+
     protected ShortLink() {
     }
 
@@ -46,6 +49,7 @@ public class ShortLink {
         this.ownerKey = ownerKey;
         this.ownerUserId = null;
         this.anonymousExpiresAt = anonymousExpiresAt;
+        this.active = true;
     }
 
     public void claimToUser(Long userId) {
@@ -56,5 +60,13 @@ public class ShortLink {
 
     public void increaseClickCount() {
         this.totalClicks += 1;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+
+    public void activate() {
+        this.active = true;
     }
 }

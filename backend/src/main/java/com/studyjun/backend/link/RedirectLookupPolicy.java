@@ -8,6 +8,10 @@ import java.time.Instant;
 public class RedirectLookupPolicy {
 
     public RedirectLookupState evaluate(ShortLink shortLink, Instant now) {
+        if (!shortLink.isActive()) {
+            return RedirectLookupState.INACTIVE;
+        }
+
         if (shortLink.getOwnerUserId() == null
                 && shortLink.getAnonymousExpiresAt() != null
                 && !shortLink.getAnonymousExpiresAt().isAfter(now)) {
@@ -17,6 +21,10 @@ public class RedirectLookupPolicy {
     }
 
     public RedirectLookupState evaluate(RedirectLookupCacheRepository.RedirectLookupCacheEntry cacheEntry, Instant now) {
+        if (Boolean.FALSE.equals(cacheEntry.active())) {
+            return RedirectLookupState.INACTIVE;
+        }
+
         if (cacheEntry.anonymousExpiresAt() != null && !cacheEntry.anonymousExpiresAt().isAfter(now)) {
             return RedirectLookupState.EXPIRED;
         }
