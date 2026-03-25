@@ -708,3 +708,243 @@ bot / scanner traffic
 
 ---
 
+# Phase 4. negative caching 적용 (Redis Negative Caching)
+
+## Why Redis Negative Caching
+
+Phase 3까지의 개선으로 아래 문제는 상당 부분 해결되었다.
+
+- write path 병목 제거 (Kafka + aggregation)
+- read path에서 DB lookup 대부분 제거 (positive cache)
+
+하지만 여전히 다음 구조적 문제가 남아 있었다.
+
+```text
+not-found 요청
+→ Redis GET miss
+→ DB select
+→ 404
+```
+
+즉,
+
+- 존재하지 않는 `shortCode` 요청은 매 요청마다 DB lookup이 발생
+- bot / scanner / invalid traffic이 증가할수록 DB read pressure가 다시 증가
+
+특히 miss traffic은 다음 특성을 가진다.
+
+- 기존 구조에서는 캐시 hit 불가
+- 요청이 많을수록 DB에 선형 부담 증가
+- 실제 서비스 가치가 낮은 트래픽
+
+```text
+miss traffic
+→ pure waste workload
+→ DB를 불필요하게 사용
+```
+
+이를 해결하기 위해 negative caching을 도입한다.
+
+---
+
+## Trade-off
+
+negative caching은 “없다”를 캐싱하는 방식이므로 아래 리스크를 반드시 관리해야 한다.
+
+### 1) Stale Negative Risk
+
+```text
+key가 나중에 생성되었는데
+→ 기존 negative cache가 남아있으면
+→ 계속 404 반환
+```
+
+즉,
+
+```text
+false negative 발생 가능
+```
+
+### 2) TTL 전략 필요
+
+- TTL이 너무 길면 stale 위험 증가
+- TTL이 너무 짧으면 효과 감소
+
+### 3) Cache Pollution
+
+- invalid key가 매우 많으면 Redis 메모리 사용량 증가
+
+### 4) Operational Complexity 증가
+
+- positive + negative cache 공존
+- invalidation 전략 분리 필요
+
+요약:
+
+```text
+DB 보호 ↔ stale risk / memory trade-off
+```
+
+---
+
+## Approach
+
+핵심 아이디어:
+
+```text
+"없음"도 캐싱한다
+```
+
+### Request Path (Negative Cache Hit)
+
+```text
+request
+→ Redis GET
+→ (NEGATIVE HIT)
+→ 404 반환
+```
+
+DB 접근 없음.
+
+### Request Path (Negative Cache Miss)
+
+```text
+request
+→ Redis GET (miss)
+→ DB select
+→ (not found)
+→ Redis SET (negative cache, TTL)
+→ 404
+```
+
+### Positive Cache와 공존 구조
+
+```text
+Redis value
+
+[positive]
+shortCode → originalUrl
+
+[negative]
+shortCode → NULL (or special marker)
+```
+
+### TTL 전략
+
+일반적으로 아래처럼 설정한다.
+
+```text
+positive cache → 상대적으로 긴 TTL
+negative cache → 짧은 TTL (예: 30s ~ 5m)
+```
+
+이유:
+
+```text
+negative는 틀릴 수 있음
+→ 빠르게 만료되어야 안전
+```
+
+### Invalidation
+
+```text
+link 생성 시
+→ Redis DEL (negative 포함)
+```
+
+---
+
+## Result
+
+### Miss Traffic
+
+| metric | Phase 3 | Phase 4 |
+|--------|--------|--------|
+| ceiling RPS | ~1500+ | ~1500+ (stable) |
+| DB load | 남아있음 (not-found fallback) | 거의 0 수준 |
+| latency | low | 더 안정 |
+
+핵심 변화:
+
+```text
+miss traffic
+→ Redis negative hit
+→ DB completely bypass
+```
+
+즉,
+
+```text
+invalid traffic cost ≈ 0
+```
+
+### System-Level Observation
+
+#### 1) DB Read 거의 0으로 수렴
+
+```text
+not-found 요청까지 cache absorb
+→ DB read = 거의 0
+```
+
+#### 2) Worst-case workload 제거
+
+기존 worst-case:
+
+```text
+bot flood (random invalid key)
+→ every request DB hit
+→ DB meltdown risk
+```
+
+Phase 4 이후:
+
+```text
+bot flood
+→ Redis absorb
+→ DB safe
+```
+
+#### 3) Throughput Ceiling 안정화
+
+```text
+throughput이 "유효 요청" 기준으로 결정됨
+```
+
+---
+
+## Summary
+
+```text
+문제:
+- miss traffic이 DB lookup을 계속 발생시킴
+- bot / invalid 요청이 DB pressure 유발
+
+해결:
+- Redis negative caching 도입
+- not-found 결과를 TTL 기반으로 캐싱
+
+결과:
+- miss traffic의 DB cost 제거
+- DB read 거의 0 수준
+- worst-case workload 제거
+- 시스템 안정성 증가
+```
+
+---
+
+## 최종 구조
+
+```text
+Phase 1: write 제거 (Kafka)
+Phase 2: write aggregation (Redis)
+Phase 3: read cache (positive)
+Phase 4: read cache (negative)
+```
+
+즉,
+
+```text
+hot path = Redis only
+DB = fallback layer
+```

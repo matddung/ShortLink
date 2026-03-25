@@ -5,7 +5,8 @@ INSERT INTO short_links (
   total_clicks,
   owner_key,
   owner_user_id,
-  anonymous_expires_at
+  anonymous_expires_at,
+  active
 )
 SELECT
   format('https://example.com/%s', lpad(gs::text, 6, '0')) AS original_url,
@@ -14,7 +15,8 @@ SELECT
   0 AS total_clicks,
   format('perf-seed-%s', lpad(gs::text, 6, '0')) AS owner_key,
   NULL AS owner_user_id,
-  NULL AS anonymous_expires_at
+  NULL AS anonymous_expires_at,
+  true AS active
 FROM generate_series(1, 100000) AS gs
 ON CONFLICT (short_code) DO UPDATE
 SET
@@ -22,4 +24,5 @@ SET
   total_clicks = 0,
   owner_key = EXCLUDED.owner_key,
   owner_user_id = NULL,
-  anonymous_expires_at = NULL;
+  anonymous_expires_at = NULL,
+  active = EXCLUDED.active;
