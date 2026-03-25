@@ -34,6 +34,9 @@ class LinkServiceRedirectLookupCacheTest {
     @Mock
     private RedirectLookupCacheRepository redirectLookupCacheRepository;
 
+    @Mock
+    private NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository;
+
     private RedirectLookupPolicy redirectLookupPolicy;
     private SimpleMeterRegistry meterRegistry;
     private LinkService linkService;
@@ -47,6 +50,7 @@ class LinkServiceRedirectLookupCacheTest {
                 linkClickEventRepository,
                 clickEventPublisher,
                 redirectLookupCacheRepository,
+                negativeRedirectLookupCacheRepository,
                 redirectLookupPolicy,
                 meterRegistry,
                 "http://localhost:8080",
@@ -56,6 +60,7 @@ class LinkServiceRedirectLookupCacheTest {
 
     @Test
     void resolveOriginalUrlSelectOnly_usesCacheFirstWithoutDbFallback() {
+        when(negativeRedirectLookupCacheRepository.findByShortCode("cache01")).thenReturn(Optional.empty());
         when(redirectLookupCacheRepository.findByShortCode("cache01"))
                 .thenReturn(Optional.of(new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
                         101L,
@@ -77,6 +82,7 @@ class LinkServiceRedirectLookupCacheTest {
         ShortLink shortLink = new ShortLink("https://example.com/db", "cache02", null, null);
         ReflectionTestUtils.setField(shortLink, "id", 202L);
 
+        when(negativeRedirectLookupCacheRepository.findByShortCode("cache02")).thenReturn(Optional.empty());
         when(redirectLookupCacheRepository.findByShortCode("cache02")).thenReturn(Optional.empty());
         when(shortLinkRepository.findByShortCode("cache02")).thenReturn(Optional.of(shortLink));
 
@@ -100,6 +106,7 @@ class LinkServiceRedirectLookupCacheTest {
         );
         ReflectionTestUtils.setField(expired, "id", 303L);
 
+        when(negativeRedirectLookupCacheRepository.findByShortCode("cache03")).thenReturn(Optional.empty());
         when(redirectLookupCacheRepository.findByShortCode("cache03")).thenReturn(Optional.empty());
         when(shortLinkRepository.findByShortCode("cache03")).thenReturn(Optional.of(expired));
 
@@ -109,6 +116,36 @@ class LinkServiceRedirectLookupCacheTest {
 
         verify(shortLinkRepository).delete(expired);
         verify(redirectLookupCacheRepository).delete("cache03");
+        verify(negativeRedirectLookupCacheRepository).delete("cache03");
+        verify(negativeRedirectLookupCacheRepository).save("cache03", NegativeRedirectReason.EXPIRED);
         verify(redirectLookupCacheRepository, never()).save(eq("cache03"), any());
+    }
+
+    @Test
+    void resolveOriginalUrlSelectOnly_throwsImmediatelyOnNegativeCacheHit() {
+        when(negativeRedirectLookupCacheRepository.findByShortCode("cache04"))
+                .thenReturn(Optional.of(NegativeRedirectReason.NOT_FOUND));
+
+        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache04"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("링크를 찾을 수 없습니다.");
+
+        verifyNoInteractions(shortLinkRepository);
+        verifyNoInteractions(redirectLookupCacheRepository);
+        assertThat(meterRegistry.get("redirect.lookup.cache.hit.count").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void resolveOriginalUrlSelectOnly_savesNegativeCacheWhenDbMisses() {
+        when(negativeRedirectLookupCacheRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
+        when(redirectLookupCacheRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
+        when(shortLinkRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache05"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("링크를 찾을 수 없습니다.");
+
+        verify(negativeRedirectLookupCacheRepository).save("cache05", NegativeRedirectReason.NOT_FOUND);
+        verify(redirectLookupCacheRepository, never()).save(eq("cache05"), any());
     }
 }

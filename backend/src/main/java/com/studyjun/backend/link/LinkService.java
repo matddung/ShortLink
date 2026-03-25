@@ -33,6 +33,7 @@ public class LinkService {
     private final LinkClickEventRepository linkClickEventRepository;
     private final ClickEventPublisher clickEventPublisher;
     private final RedirectLookupCacheRepository redirectLookupCacheRepository;
+    private final NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository;
     private final RedirectLookupPolicy redirectLookupPolicy;
     private final Counter redirectCacheHitCounter;
     private final Counter redirectCacheMissCounter;
@@ -45,6 +46,7 @@ public class LinkService {
                        LinkClickEventRepository linkClickEventRepository,
                        ClickEventPublisher clickEventPublisher,
                        RedirectLookupCacheRepository redirectLookupCacheRepository,
+                       NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository,
                        RedirectLookupPolicy redirectLookupPolicy,
                        MeterRegistry meterRegistry,
                        @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
@@ -53,6 +55,7 @@ public class LinkService {
         this.linkClickEventRepository = linkClickEventRepository;
         this.clickEventPublisher = clickEventPublisher;
         this.redirectLookupCacheRepository = redirectLookupCacheRepository;
+        this.negativeRedirectLookupCacheRepository = negativeRedirectLookupCacheRepository;
         this.redirectLookupPolicy = redirectLookupPolicy;
         this.redirectCacheHitCounter = meterRegistry.counter("redirect.lookup.cache.hit.count");
         this.redirectCacheMissCounter = meterRegistry.counter("redirect.lookup.cache.miss.count");
@@ -249,6 +252,14 @@ public class LinkService {
 
     private ResolvedRedirectTarget resolveRedirectableTarget(String shortCode) {
         Instant now = Instant.now();
+
+        Optional<NegativeRedirectReason> negativeCachedReason = negativeRedirectLookupCacheRepository.findByShortCode(shortCode);
+        if (negativeCachedReason.isPresent()) {
+            redirectCacheHitCounter.increment();
+            log.info("Redirect negative cache hit. shortCode={}, reason={}", shortCode, negativeCachedReason.get());
+            throw linkNotFoundException();
+        }
+
         Optional<RedirectLookupCacheRepository.RedirectLookupCacheEntry> cached = redirectLookupCacheRepository.findByShortCode(shortCode);
 
         if (cached.isPresent() && redirectLookupPolicy.evaluate(cached.get(), now) == RedirectLookupState.REDIRECTABLE) {
@@ -267,13 +278,19 @@ public class LinkService {
         redirectDbFallbackCounter.increment();
         log.info("Redirect lookup DB fallback. shortCode={}", shortCode);
 
-        ShortLink shortLink = shortLinkRepository.findByShortCode(shortCode)
-                .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        Optional<ShortLink> shortLinkOptional = shortLinkRepository.findByShortCode(shortCode);
+        if (shortLinkOptional.isEmpty()) {
+            negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.NOT_FOUND);
+            throw linkNotFoundException();
+        }
+
+        ShortLink shortLink = shortLinkOptional.get();
 
         if (redirectLookupPolicy.evaluate(shortLink, now) == RedirectLookupState.EXPIRED) {
             shortLinkRepository.delete(shortLink);
             invalidateRedirectLookupCache(shortCode);
-            throw new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+            negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.EXPIRED);
+            throw linkNotFoundException();
         }
 
         redirectLookupCacheRepository.save(
@@ -284,12 +301,14 @@ public class LinkService {
                         shortLink.getAnonymousExpiresAt()
                 )
         );
+        negativeRedirectLookupCacheRepository.delete(shortCode);
 
         return new ResolvedRedirectTarget(shortLink.getId(), shortLink.getOriginalUrl());
     }
 
     private void invalidateRedirectLookupCache(String shortCode) {
         redirectLookupCacheRepository.delete(shortCode);
+        negativeRedirectLookupCacheRepository.delete(shortCode);
     }
 
     private void invalidateRedirectLookupCaches(List<ShortLink> shortLinks) {
@@ -303,6 +322,10 @@ public class LinkService {
 
     private boolean isAnonymousExpired(ShortLink shortLink) {
         return redirectLookupPolicy.evaluate(shortLink, Instant.now()) == RedirectLookupState.EXPIRED;
+    }
+
+    private BusinessException linkNotFoundException() {
+        return new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
     }
 
     private LinkResponse.ShortLinkResponse toResponse(ShortLink shortLink) {
