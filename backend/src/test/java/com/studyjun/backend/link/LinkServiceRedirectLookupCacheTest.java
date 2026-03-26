@@ -26,9 +26,6 @@ class LinkServiceRedirectLookupCacheTest {
     private ShortLinkRepository shortLinkRepository;
 
     @Mock
-    private LinkClickEventRepository linkClickEventRepository;
-
-    @Mock
     private ClickEventPublisher clickEventPublisher;
 
     @Mock
@@ -39,20 +36,32 @@ class LinkServiceRedirectLookupCacheTest {
 
     private RedirectLookupPolicy redirectLookupPolicy;
     private SimpleMeterRegistry meterRegistry;
+    private LinkStatsService linkStatsService;
     private LinkService linkService;
 
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         redirectLookupPolicy = new RedirectLookupPolicy();
-        linkService = new LinkService(
+        linkStatsService = mock(LinkStatsService.class);
+        AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy = new AnonymousLinkExpiryPolicy(redirectLookupPolicy);
+        UrlValidationService urlValidationService = new UrlValidationService();
+        ShortCodeService shortCodeService = new ShortCodeService(shortLinkRepository);
+        RedirectService redirectService = new RedirectService(
                 shortLinkRepository,
-                linkClickEventRepository,
                 clickEventPublisher,
                 redirectLookupCacheRepository,
                 negativeRedirectLookupCacheRepository,
                 redirectLookupPolicy,
-                meterRegistry,
+                meterRegistry
+        );
+        linkService = new LinkService(
+                shortLinkRepository,
+                anonymousLinkExpiryPolicy,
+                urlValidationService,
+                shortCodeService,
+                redirectService,
+                linkStatsService,
                 "http://localhost:8080",
                 30
         );

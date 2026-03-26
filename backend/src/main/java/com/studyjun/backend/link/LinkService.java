@@ -1,91 +1,67 @@
 package com.studyjun.backend.link;
 
-import com.studyjun.backend.common.BusinessException;
-import com.studyjun.backend.link.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.SecureRandom;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
 
 @Slf4j
 @Service
 public class LinkService {
 
-    private static final String CHARACTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    private static final int SHORT_CODE_LENGTH = 6;
-
     private final ShortLinkRepository shortLinkRepository;
-    private final LinkClickEventRepository linkClickEventRepository;
-    private final ClickEventPublisher clickEventPublisher;
-    private final RedirectLookupCacheRepository redirectLookupCacheRepository;
-    private final NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository;
-    private final RedirectLookupPolicy redirectLookupPolicy;
-    private final Counter redirectCacheHitCounter;
-    private final Counter redirectCacheMissCounter;
-    private final Counter redirectDbFallbackCounter;
-    private final SecureRandom secureRandom = new SecureRandom();
+    private final AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy;
+    private final UrlValidationService urlValidationService;
+    private final ShortCodeService shortCodeService;
+    private final RedirectService redirectService;
+    private final LinkStatsService linkStatsService;
     private final String appBaseUrl;
     private final long anonymousExpirationDays;
 
     public LinkService(ShortLinkRepository shortLinkRepository,
-                       LinkClickEventRepository linkClickEventRepository,
-                       ClickEventPublisher clickEventPublisher,
-                       RedirectLookupCacheRepository redirectLookupCacheRepository,
-                       NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository,
-                       RedirectLookupPolicy redirectLookupPolicy,
-                       MeterRegistry meterRegistry,
+                       AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy,
+                       UrlValidationService urlValidationService,
+                       ShortCodeService shortCodeService,
+                       RedirectService redirectService,
+                       LinkStatsService linkStatsService,
                        @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
                        @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
-        this.linkClickEventRepository = linkClickEventRepository;
-        this.clickEventPublisher = clickEventPublisher;
-        this.redirectLookupCacheRepository = redirectLookupCacheRepository;
-        this.negativeRedirectLookupCacheRepository = negativeRedirectLookupCacheRepository;
-        this.redirectLookupPolicy = redirectLookupPolicy;
-        this.redirectCacheHitCounter = meterRegistry.counter("redirect.lookup.cache.hit.count");
-        this.redirectCacheMissCounter = meterRegistry.counter("redirect.lookup.cache.miss.count");
-        this.redirectDbFallbackCounter = meterRegistry.counter("redirect.lookup.db.fallback.count");
+        this.anonymousLinkExpiryPolicy = anonymousLinkExpiryPolicy;
+        this.urlValidationService = urlValidationService;
+        this.shortCodeService = shortCodeService;
+        this.redirectService = redirectService;
+        this.linkStatsService = linkStatsService;
         this.appBaseUrl = appBaseUrl;
         this.anonymousExpirationDays = anonymousExpirationDays;
     }
 
     @Transactional
     public LinkResponse.ShortLinkResponse createAnonymous(String originalUrl, String ownerKey) {
-        validateUrl(originalUrl);
+        urlValidationService.validate(originalUrl);
 
-        String shortCode = generateUniqueShortCode();
+        String shortCode = shortCodeService.generateUniqueShortCode();
         Instant anonymousExpiresAt = Instant.now().plus(anonymousExpirationDays, ChronoUnit.DAYS);
         ShortLink saved = shortLinkRepository.save(new ShortLink(originalUrl, shortCode, ownerKey, anonymousExpiresAt));
-        invalidateRedirectLookupCache(saved.getShortCode());
+        redirectService.invalidateRedirectLookupCache(saved.getShortCode());
 
         return toResponse(saved);
     }
 
     @Transactional
     public LinkResponse.ShortLinkResponse createForUser(String originalUrl, String customCode, Long userId) {
-        validateUrl(originalUrl);
+        urlValidationService.validate(originalUrl);
 
-        String shortCode = resolveShortCode(customCode);
+        String shortCode = shortCodeService.resolveShortCode(customCode);
         ShortLink shortLink = new ShortLink(originalUrl, shortCode, null, null);
         shortLink.claimToUser(userId);
 
         ShortLink saved = shortLinkRepository.save(shortLink);
-        invalidateRedirectLookupCache(saved.getShortCode());
+        redirectService.invalidateRedirectLookupCache(saved.getShortCode());
         return toResponse(saved);
     }
 
@@ -98,7 +74,7 @@ public class LinkService {
                 .toList();
         if (!expired.isEmpty()) {
             shortLinkRepository.deleteAll(expired);
-            invalidateRedirectLookupCaches(expired);
+            redirectService.invalidateRedirectLookupCaches(expired);
         }
 
         return links.stream()
@@ -125,12 +101,12 @@ public class LinkService {
 
         if (!expiredLinks.isEmpty()) {
             shortLinkRepository.deleteAll(expiredLinks);
-            expiredLinks.forEach(link -> invalidateRedirectLookupCache(link.getShortCode()));
+            expiredLinks.forEach(link -> redirectService.invalidateRedirectLookupCache(link.getShortCode()));
         }
 
         validLinks.forEach(link -> {
             link.claimToUser(userId);
-            invalidateRedirectLookupCache(link.getShortCode());
+            redirectService.invalidateRedirectLookupCache(link.getShortCode());
         });
         return validLinks.size();
     }
@@ -139,7 +115,7 @@ public class LinkService {
     public long purgeExpiredAnonymousLinks() {
         Instant threshold = Instant.now();
         List<ShortLink> expiredLinks = shortLinkRepository.findAllByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
-        expiredLinks.forEach(link -> invalidateRedirectLookupCache(link.getShortCode()));
+        expiredLinks.forEach(link -> redirectService.invalidateRedirectLookupCache(link.getShortCode()));
         return shortLinkRepository.deleteByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
     }
 
@@ -152,188 +128,21 @@ public class LinkService {
 
     @Transactional
     public LinkResponse.LinkStatsResponse getLinkStats(Long linkId, Long userId) {
-        ShortLink link = shortLinkRepository.findByIdAndOwnerUserId(linkId, userId)
-                .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-
-        List<LinkClickEvent> allEvents = linkClickEventRepository.findAllByShortLinkIdOrderByClickedAtDesc(linkId);
-
-        long uniqueClicks = allEvents.stream()
-                .map(LinkClickEvent::getVisitorKey)
-                .filter(Objects::nonNull)
-                .filter(key -> !key.isBlank())
-                .distinct()
-                .count();
-
-        Instant lastClickedAt = allEvents.isEmpty() ? null : allEvents.get(0).getClickedAt();
-
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        LocalDate startDate = today.minusDays(13);
-        Instant startInstant = startDate.atStartOfDay().toInstant(ZoneOffset.UTC);
-
-        Map<LocalDate, Long> clickByDate = linkClickEventRepository
-                .findAllByShortLinkIdAndClickedAtGreaterThanEqualOrderByClickedAtAsc(linkId, startInstant)
-                .stream()
-                .collect(Collectors.groupingBy(
-                        event -> event.getClickedAt().atZone(ZoneOffset.UTC).toLocalDate(),
-                        Collectors.counting()
-                ));
-
-        List<LinkResponse.DailyClickStat> dailyClicks = new ArrayList<>();
-        for (int i = 0; i < 14; i++) {
-            LocalDate date = startDate.plusDays(i);
-            dailyClicks.add(new LinkResponse.DailyClickStat(date, clickByDate.getOrDefault(date, 0L)));
-        }
-
-        List<LinkResponse.CountryStat> topCountries = allEvents.stream()
-                .map(LinkClickEvent::getCountryCode)
-                .map(country -> country == null || country.isBlank() ? "Unknown" : country)
-                .collect(Collectors.groupingBy(country -> country, Collectors.counting()))
-                .entrySet()
-                .stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(5)
-                .map(entry -> new LinkResponse.CountryStat(entry.getKey(), entry.getValue()))
-                .toList();
-
-        long totalEvents = allEvents.size();
-        List<LinkResponse.ReferrerStat> topReferrers = allEvents.stream()
-                .map(LinkClickEvent::getReferrer)
-                .map(ref -> ref == null || ref.isBlank() ? "Direct" : ref)
-                .collect(Collectors.groupingBy(ref -> ref, Collectors.counting()))
-                .entrySet()
-                .stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(5)
-                .map(entry -> {
-                    double percentage = totalEvents == 0 ? 0 : (entry.getValue() * 100.0) / totalEvents;
-                    return new LinkResponse.ReferrerStat(entry.getKey(), entry.getValue(), Math.round(percentage * 10.0) / 10.0);
-                })
-                .toList();
-
-        return new LinkResponse.LinkStatsResponse(
-                link.getTotalClicks(),
-                uniqueClicks,
-                lastClickedAt,
-                topReferrers,
-                dailyClicks,
-                topCountries
-        );
+        return linkStatsService.getLinkStats(linkId, userId);
     }
 
     @Transactional
     public String resolveOriginalUrl(String shortCode, String countryCode, String referrer, String visitorKey, String requestId, String source) {
-        ResolvedRedirectTarget redirectTarget = resolveRedirectableTarget(shortCode);
-
-        Instant clickedAt = Instant.now();
-        clickEventPublisher.publish(new RedirectClickEventMessage(
-                buildEventId(redirectTarget.shortLinkId(), requestId),
-                DateTimeFormatter.ISO_INSTANT.format(clickedAt),
-                requestId,
-                source,
-                redirectTarget.shortLinkId(),
-                shortCode,
-                redirectTarget.originalUrl(),
-                countryCode,
-                referrer,
-                visitorKey
-        ));
-
-        return redirectTarget.originalUrl();
-    }
-
-    private UUID buildEventId(Long shortLinkId, String requestId) {
-        return UUID.nameUUIDFromBytes((shortLinkId + ":" + requestId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return redirectService.resolveOriginalUrl(shortCode, countryCode, referrer, visitorKey, requestId, source);
     }
 
     @Transactional(readOnly = true)
     public String resolveOriginalUrlSelectOnly(String shortCode) {
-        return resolveRedirectableTarget(shortCode).originalUrl();
-    }
-
-    private ResolvedRedirectTarget resolveRedirectableTarget(String shortCode) {
-        Instant now = Instant.now();
-
-        Optional<NegativeRedirectReason> negativeCachedReason = negativeRedirectLookupCacheRepository.findByShortCode(shortCode);
-        if (negativeCachedReason.isPresent()) {
-            redirectCacheHitCounter.increment();
-            log.info("Redirect negative cache hit. shortCode={}, reason={}", shortCode, negativeCachedReason.get());
-            throw linkNotFoundException();
-        }
-
-        Optional<RedirectLookupCacheRepository.RedirectLookupCacheEntry> cached = redirectLookupCacheRepository.findByShortCode(shortCode);
-
-        if (cached.isPresent() && redirectLookupPolicy.evaluate(cached.get(), now) == RedirectLookupState.REDIRECTABLE) {
-            redirectCacheHitCounter.increment();
-            log.info("Redirect lookup cache hit. shortCode={}", shortCode);
-            RedirectLookupCacheRepository.RedirectLookupCacheEntry entry = cached.get();
-            return new ResolvedRedirectTarget(entry.shortLinkId(), entry.originalUrl());
-        }
-
-        if (cached.isPresent()) {
-            invalidateRedirectLookupCache(shortCode);
-        }
-
-        redirectCacheMissCounter.increment();
-        log.info("Redirect lookup cache miss. shortCode={}", shortCode);
-        redirectDbFallbackCounter.increment();
-        log.info("Redirect lookup DB fallback. shortCode={}", shortCode);
-
-        Optional<ShortLink> shortLinkOptional = shortLinkRepository.findByShortCode(shortCode);
-        if (shortLinkOptional.isEmpty()) {
-            negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.NOT_FOUND);
-            throw linkNotFoundException();
-        }
-
-        ShortLink shortLink = shortLinkOptional.get();
-
-        RedirectLookupState redirectLookupState = redirectLookupPolicy.evaluate(shortLink, now);
-        if (redirectLookupState == RedirectLookupState.INACTIVE) {
-            invalidateRedirectLookupCache(shortCode);
-            negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.INACTIVE);
-            throw linkNotFoundException();
-        }
-
-        if (redirectLookupState == RedirectLookupState.EXPIRED) {
-            shortLinkRepository.delete(shortLink);
-            invalidateRedirectLookupCache(shortCode);
-            negativeRedirectLookupCacheRepository.save(shortCode, NegativeRedirectReason.EXPIRED);
-            throw linkNotFoundException();
-        }
-
-        redirectLookupCacheRepository.save(
-                shortCode,
-                new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
-                        shortLink.getId(),
-                        shortLink.getOriginalUrl(),
-                        shortLink.getAnonymousExpiresAt(),
-                        shortLink.isActive()
-                )
-        );
-        negativeRedirectLookupCacheRepository.delete(shortCode);
-
-        return new ResolvedRedirectTarget(shortLink.getId(), shortLink.getOriginalUrl());
-    }
-
-    private void invalidateRedirectLookupCache(String shortCode) {
-        redirectLookupCacheRepository.delete(shortCode);
-        negativeRedirectLookupCacheRepository.delete(shortCode);
-    }
-
-    private void invalidateRedirectLookupCaches(List<ShortLink> shortLinks) {
-        shortLinks.stream()
-                .map(ShortLink::getShortCode)
-                .forEach(this::invalidateRedirectLookupCache);
-    }
-
-    private record ResolvedRedirectTarget(Long shortLinkId, String originalUrl) {
+        return redirectService.resolveOriginalUrlSelectOnly(shortCode);
     }
 
     private boolean isAnonymousExpired(ShortLink shortLink) {
-        return redirectLookupPolicy.evaluate(shortLink, Instant.now()) == RedirectLookupState.EXPIRED;
-    }
-
-    private BusinessException linkNotFoundException() {
-        return new BusinessException("LINK_NOT_FOUND", "링크를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        return anonymousLinkExpiryPolicy.isExpired(shortLink);
     }
 
     private LinkResponse.ShortLinkResponse toResponse(ShortLink shortLink) {
@@ -351,50 +160,5 @@ public class LinkService {
 
     private String buildShortUrl(String shortCode) {
         return appBaseUrl + "/s/" + shortCode;
-    }
-
-    private void validateUrl(String originalUrl) {
-        try {
-            URI uri = new URI(originalUrl);
-            String scheme = uri.getScheme();
-            if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
-                throw new BusinessException("INVALID_URL", "올바른 URL을 입력해 주세요.", HttpStatus.BAD_REQUEST);
-            }
-
-            if (uri.getHost() == null || uri.getHost().isBlank()) {
-                throw new BusinessException("INVALID_URL", "올바른 URL을 입력해 주세요.", HttpStatus.BAD_REQUEST);
-            }
-        } catch (URISyntaxException e) {
-            throw new BusinessException("INVALID_URL", "올바른 URL을 입력해 주세요.", HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    private String resolveShortCode(String customCode) {
-        if (customCode != null && !customCode.isBlank()) {
-            if (shortLinkRepository.existsByShortCode(customCode)) {
-                throw new BusinessException("SHORT_CODE_ALREADY_EXISTS", "이미 사용 중인 커스텀 코드입니다.", HttpStatus.CONFLICT);
-            }
-            return customCode;
-        }
-
-        return generateUniqueShortCode();
-    }
-
-    private String generateUniqueShortCode() {
-        for (int i = 0; i < 10; i++) {
-            String code = randomCode();
-            if (!shortLinkRepository.existsByShortCode(code)) {
-                return code;
-            }
-        }
-        throw new BusinessException("SHORT_CODE_GENERATION_FAILED", "짧은 링크 생성에 실패했습니다. 다시 시도해 주세요.", HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    private String randomCode() {
-        StringBuilder builder = new StringBuilder(SHORT_CODE_LENGTH);
-        for (int i = 0; i < SHORT_CODE_LENGTH; i++) {
-            builder.append(CHARACTERS.charAt(secureRandom.nextInt(CHARACTERS.length())));
-        }
-        return builder.toString();
     }
 }
