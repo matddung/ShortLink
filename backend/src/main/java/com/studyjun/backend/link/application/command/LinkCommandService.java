@@ -1,6 +1,6 @@
-package com.studyjun.backend.link;
+package com.studyjun.backend.link.application.command;
 
-import lombok.extern.slf4j.Slf4j;
+import com.studyjun.backend.link.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,33 +9,29 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
-@Slf4j
 @Service
-public class LinkService {
+public class LinkCommandService {
 
     private final ShortLinkRepository shortLinkRepository;
     private final AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy;
     private final UrlValidationService urlValidationService;
     private final ShortCodeService shortCodeService;
     private final RedirectService redirectService;
-    private final LinkStatsService linkStatsService;
     private final String appBaseUrl;
     private final long anonymousExpirationDays;
 
-    public LinkService(ShortLinkRepository shortLinkRepository,
-                       AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy,
-                       UrlValidationService urlValidationService,
-                       ShortCodeService shortCodeService,
-                       RedirectService redirectService,
-                       LinkStatsService linkStatsService,
-                       @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
-                       @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
+    public LinkCommandService(ShortLinkRepository shortLinkRepository,
+                              AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy,
+                              UrlValidationService urlValidationService,
+                              ShortCodeService shortCodeService,
+                              RedirectService redirectService,
+                              @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
+                              @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
         this.anonymousLinkExpiryPolicy = anonymousLinkExpiryPolicy;
         this.urlValidationService = urlValidationService;
         this.shortCodeService = shortCodeService;
         this.redirectService = redirectService;
-        this.linkStatsService = linkStatsService;
         this.appBaseUrl = appBaseUrl;
         this.anonymousExpirationDays = anonymousExpirationDays;
     }
@@ -63,24 +59,6 @@ public class LinkService {
         ShortLink saved = shortLinkRepository.save(shortLink);
         redirectService.invalidateRedirectLookupCache(saved.getShortCode());
         return toResponse(saved);
-    }
-
-    @Transactional
-    public List<LinkResponse.ShortLinkResponse> getAnonymousLinks(String ownerKey) {
-        List<ShortLink> links = shortLinkRepository.findAllByOwnerKeyAndOwnerUserIdIsNullOrderByCreatedAtDesc(ownerKey);
-
-        List<ShortLink> expired = links.stream()
-                .filter(this::isAnonymousExpired)
-                .toList();
-        if (!expired.isEmpty()) {
-            shortLinkRepository.deleteAll(expired);
-            redirectService.invalidateRedirectLookupCaches(expired);
-        }
-
-        return links.stream()
-                .filter(link -> !isAnonymousExpired(link))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional
@@ -117,28 +95,6 @@ public class LinkService {
         List<ShortLink> expiredLinks = shortLinkRepository.findAllByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
         expiredLinks.forEach(link -> redirectService.invalidateRedirectLookupCache(link.getShortCode()));
         return shortLinkRepository.deleteByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
-    }
-
-    @Transactional
-    public List<LinkResponse.ShortLinkResponse> getUserLinks(Long userId) {
-        return shortLinkRepository.findAllByOwnerUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(this::toResponse)
-                .toList();
-    }
-
-    @Transactional
-    public LinkResponse.LinkStatsResponse getLinkStats(Long linkId, Long userId) {
-        return linkStatsService.getLinkStats(linkId, userId);
-    }
-
-    @Transactional
-    public String resolveOriginalUrl(String shortCode, String countryCode, String referrer, String visitorKey, String requestId, String source) {
-        return redirectService.resolveOriginalUrl(shortCode, countryCode, referrer, visitorKey, requestId, source);
-    }
-
-    @Transactional(readOnly = true)
-    public String resolveOriginalUrlSelectOnly(String shortCode) {
-        return redirectService.resolveOriginalUrlSelectOnly(shortCode);
     }
 
     private boolean isAnonymousExpired(ShortLink shortLink) {

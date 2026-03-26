@@ -1,6 +1,7 @@
 package com.studyjun.backend.link;
 
 import com.studyjun.backend.common.BusinessException;
+import com.studyjun.backend.link.application.redirect.LinkRedirectService;
 import com.studyjun.backend.link.clickevent.ClickEventPublisher;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +21,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class LinkServiceRedirectLookupCacheTest {
+class LinkRedirectServiceCacheTest {
 
     @Mock
     private ShortLinkRepository shortLinkRepository;
@@ -36,17 +37,13 @@ class LinkServiceRedirectLookupCacheTest {
 
     private RedirectLookupPolicy redirectLookupPolicy;
     private SimpleMeterRegistry meterRegistry;
-    private LinkStatsService linkStatsService;
-    private LinkService linkService;
+    private LinkRedirectService linkRedirectService;
 
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         redirectLookupPolicy = new RedirectLookupPolicy();
-        linkStatsService = mock(LinkStatsService.class);
-        AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy = new AnonymousLinkExpiryPolicy(redirectLookupPolicy);
-        UrlValidationService urlValidationService = new UrlValidationService();
-        ShortCodeService shortCodeService = new ShortCodeService(shortLinkRepository);
+
         RedirectService redirectService = new RedirectService(
                 shortLinkRepository,
                 clickEventPublisher,
@@ -55,16 +52,7 @@ class LinkServiceRedirectLookupCacheTest {
                 redirectLookupPolicy,
                 meterRegistry
         );
-        linkService = new LinkService(
-                shortLinkRepository,
-                anonymousLinkExpiryPolicy,
-                urlValidationService,
-                shortCodeService,
-                redirectService,
-                linkStatsService,
-                "http://localhost:8080",
-                30
-        );
+        linkRedirectService = new LinkRedirectService(redirectService);
     }
 
     @Test
@@ -78,7 +66,7 @@ class LinkServiceRedirectLookupCacheTest {
                         true
                 )));
 
-        String originalUrl = linkService.resolveOriginalUrlSelectOnly("cache01");
+        String originalUrl = linkRedirectService.resolveOriginalUrlSelectOnly("cache01");
 
         assertThat(originalUrl).isEqualTo("https://example.com/cached");
         verifyNoInteractions(shortLinkRepository);
@@ -96,7 +84,7 @@ class LinkServiceRedirectLookupCacheTest {
         when(redirectLookupCacheRepository.findByShortCode("cache02")).thenReturn(Optional.empty());
         when(shortLinkRepository.findByShortCode("cache02")).thenReturn(Optional.of(shortLink));
 
-        String originalUrl = linkService.resolveOriginalUrlSelectOnly("cache02");
+        String originalUrl = linkRedirectService.resolveOriginalUrlSelectOnly("cache02");
 
         assertThat(originalUrl).isEqualTo("https://example.com/db");
         verify(shortLinkRepository).findByShortCode("cache02");
@@ -120,7 +108,7 @@ class LinkServiceRedirectLookupCacheTest {
         when(redirectLookupCacheRepository.findByShortCode("cache03")).thenReturn(Optional.empty());
         when(shortLinkRepository.findByShortCode("cache03")).thenReturn(Optional.of(expired));
 
-        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache03"))
+        assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache03"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
@@ -136,7 +124,7 @@ class LinkServiceRedirectLookupCacheTest {
         when(negativeRedirectLookupCacheRepository.findByShortCode("cache04"))
                 .thenReturn(Optional.of(NegativeRedirectReason.NOT_FOUND));
 
-        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache04"))
+        assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache04"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
@@ -151,7 +139,7 @@ class LinkServiceRedirectLookupCacheTest {
         when(redirectLookupCacheRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
         when(shortLinkRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache05"))
+        assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache05"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
@@ -170,7 +158,7 @@ class LinkServiceRedirectLookupCacheTest {
         when(redirectLookupCacheRepository.findByShortCode("cache06")).thenReturn(Optional.empty());
         when(shortLinkRepository.findByShortCode("cache06")).thenReturn(Optional.of(inactive));
 
-        assertThatThrownBy(() -> linkService.resolveOriginalUrlSelectOnly("cache06"))
+        assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache06"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 

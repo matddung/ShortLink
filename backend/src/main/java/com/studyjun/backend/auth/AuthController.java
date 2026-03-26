@@ -1,7 +1,7 @@
 package com.studyjun.backend.auth;
 
 import com.studyjun.backend.common.ApiResponse;
-import com.studyjun.backend.link.LinkService;
+import com.studyjun.backend.link.application.command.LinkCommandService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -23,15 +23,15 @@ public class AuthController {
     private final boolean secureCookie;
     private final String sameSite;
     private final long refreshTokenExpirationMs;
-    private final LinkService linkService;
+    private final LinkCommandService linkCommandService;
 
     public AuthController(AuthService authService,
-                          LinkService linkService,
+                          LinkCommandService linkCommandService,
                           @Value("${app.auth.secure-cookie:true}") boolean secureCookie,
                           @Value("${app.auth.same-site:Lax}") String sameSite,
                           @Value("${jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs) {
         this.authService = authService;
-        this.linkService = linkService;
+        this.linkCommandService = linkCommandService;
         this.secureCookie = secureCookie;
         this.sameSite = sameSite;
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;
@@ -43,7 +43,7 @@ public class AuthController {
             @CookieValue(name = ANONYMOUS_OWNER_COOKIE_NAME, required = false) String anonymousOwner
     ) {
         AuthResponse.UserResponse user = authService.signup(request);
-        int moved = linkService.claimAnonymousLinks(anonymousOwner, user.id());
+        int moved = linkCommandService.claimAnonymousLinks(anonymousOwner, user.id());
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
         if (moved > 0) {
@@ -60,7 +60,7 @@ public class AuthController {
     ) {
         AuthResponse.TokenResponse tokenResponse = authService.login(request);
         AuthResponse.UserResponse user = authService.getCurrentUser(request.email());
-        int moved = linkService.claimAnonymousLinks(anonymousOwner, user.id());
+        int moved = linkCommandService.claimAnonymousLinks(anonymousOwner, user.id());
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, createRefreshTokenCookie(tokenResponse.refreshToken()));

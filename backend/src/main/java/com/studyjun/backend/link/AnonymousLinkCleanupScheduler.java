@@ -1,19 +1,20 @@
 package com.studyjun.backend.link;
 
+import com.studyjun.backend.link.application.command.LinkCommandService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AnonymousLinkCleanupScheduler {
 
-    private final LinkService linkService;
+    private final LinkCommandService linkCommandService;
 
-    public AnonymousLinkCleanupScheduler(LinkService linkService) {
-        this.linkService = linkService;
+    public AnonymousLinkCleanupScheduler(LinkCommandService linkCommandService) {
+        this.linkCommandService = linkCommandService;
     }
 
     @Scheduled(cron = "0 0 * * * *")
     public void cleanupExpiredAnonymousLinks() {
-        linkService.purgeExpiredAnonymousLinks();
+        linkCommandService.purgeExpiredAnonymousLinks();
     }
 }
