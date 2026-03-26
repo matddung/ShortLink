@@ -2,6 +2,7 @@ package com.studyjun.backend.link.clickevent;
 
 import com.studyjun.backend.link.ShortLinkRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "app.analytics.kafka.consumer-enabled", havingValue = "true")
 public class ClickCountFlushWorker {
 
     private final ClickCountBufferService clickCountBufferService;
