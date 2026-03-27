@@ -1,5 +1,6 @@
 package com.studyjun.backend.link.clickevent;
 
+import com.studyjun.backend.link.ShortLinkMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.RedisStringCommands;
@@ -31,9 +32,12 @@ public class ClickCountBufferService {
     );
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final ShortLinkMetrics shortLinkMetrics;
 
-    public ClickCountBufferService(@Qualifier("clickCountRedisTemplate") RedisTemplate<String, String> redisTemplate) {
+    public ClickCountBufferService(@Qualifier("clickCountRedisTemplate") RedisTemplate<String, String> redisTemplate,
+                                   ShortLinkMetrics shortLinkMetrics) {
         this.redisTemplate = redisTemplate;
+        this.shortLinkMetrics = shortLinkMetrics;
     }
 
     public long increment(Long shortLinkId) {
@@ -47,11 +51,14 @@ public class ClickCountBufferService {
     public Set<String> findBufferedKeys() {
         Set<String> keys = redisTemplate.keys(CLICK_COUNT_KEY_PREFIX + "*");
         if (keys == null || keys.isEmpty()) {
+            shortLinkMetrics.setRedisCounterKeyCount(0);
             return Collections.emptySet();
         }
-        return keys.stream()
+        Set<String> bufferedKeys = keys.stream()
                 .filter(this::isBufferedCountKey)
                 .collect(Collectors.toSet());
+        shortLinkMetrics.setRedisCounterKeyCount(bufferedKeys.size());
+        return bufferedKeys;
     }
 
     public Long consumeBufferedCount(String key) {

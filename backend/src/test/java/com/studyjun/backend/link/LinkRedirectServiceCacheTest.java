@@ -50,7 +50,7 @@ class LinkRedirectServiceCacheTest {
                 redirectLookupCacheRepository,
                 negativeRedirectLookupCacheRepository,
                 redirectLookupPolicy,
-                meterRegistry
+                new ShortLinkMetrics(meterRegistry)
         );
         linkRedirectService = new LinkRedirectService(redirectService);
     }
@@ -70,9 +70,10 @@ class LinkRedirectServiceCacheTest {
 
         assertThat(originalUrl).isEqualTo("https://example.com/cached");
         verifyNoInteractions(shortLinkRepository);
-        assertThat(meterRegistry.get("redirect.lookup.cache.hit.count").counter().count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("redirect.lookup.cache.miss.count").counter().count()).isZero();
-        assertThat(meterRegistry.get("redirect.lookup.db.fallback.count").counter().count()).isZero();
+        assertThat(meterRegistry.get("shortlink.redis.lookup.cache.hit.total").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("shortlink.redis.lookup.cache.miss.total").counter().count()).isZero();
+        assertThat(meterRegistry.get("shortlink.api.redirect.db_fallback.total").counter().count()).isZero();
+        assertThat(meterRegistry.get("shortlink.redis.lookup.negative_cache.miss.total").counter().count()).isEqualTo(1.0);
     }
 
     @Test
@@ -89,9 +90,10 @@ class LinkRedirectServiceCacheTest {
         assertThat(originalUrl).isEqualTo("https://example.com/db");
         verify(shortLinkRepository).findByShortCode("cache02");
         verify(redirectLookupCacheRepository).save(eq("cache02"), any(RedirectLookupCacheRepository.RedirectLookupCacheEntry.class));
-        assertThat(meterRegistry.get("redirect.lookup.cache.hit.count").counter().count()).isZero();
-        assertThat(meterRegistry.get("redirect.lookup.cache.miss.count").counter().count()).isEqualTo(1.0);
-        assertThat(meterRegistry.get("redirect.lookup.db.fallback.count").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("shortlink.redis.lookup.cache.hit.total").counter().count()).isZero();
+        assertThat(meterRegistry.get("shortlink.redis.lookup.cache.miss.total").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("shortlink.api.redirect.db_fallback.total").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("shortlink.redis.lookup.negative_cache.miss.total").counter().count()).isEqualTo(1.0);
     }
 
     @Test
@@ -130,7 +132,7 @@ class LinkRedirectServiceCacheTest {
 
         verifyNoInteractions(shortLinkRepository);
         verifyNoInteractions(redirectLookupCacheRepository);
-        assertThat(meterRegistry.get("redirect.lookup.cache.hit.count").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("shortlink.redis.lookup.negative_cache.hit.total").counter().count()).isEqualTo(1.0);
     }
 
     @Test

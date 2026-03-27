@@ -1,5 +1,6 @@
 package com.studyjun.backend.config;
 
+import com.studyjun.backend.link.ShortLinkMetrics;
 import com.studyjun.backend.link.clickevent.ClickEventPublisher;
 import com.studyjun.backend.link.clickevent.KafkaClickEventPublisher;
 import com.studyjun.backend.link.clickevent.NoopClickEventPublisher;
@@ -17,9 +18,10 @@ public class ClickEventPublisherConfig {
     @ConditionalOnProperty(name = "app.analytics.kafka.producer-enabled", havingValue = "true")
     public ClickEventPublisher kafkaClickEventPublisher(
             KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate,
-            @Value("${app.analytics.kafka.topic:shortlink.redirect.click.v1}") String topic
+            @Value("${app.analytics.kafka.topic:shortlink.redirect.click.v1}") String topic,
+            ShortLinkMetrics shortLinkMetrics
     ) {
-        return new KafkaClickEventPublisher(kafkaTemplate, topic);
+        return new KafkaClickEventPublisher(kafkaTemplate, topic, shortLinkMetrics);
     }
 
     @Bean

@@ -3,8 +3,6 @@ package com.studyjun.backend.link;
 import com.studyjun.backend.common.BusinessException;
 import com.studyjun.backend.link.clickevent.ClickEventPublisher;
 import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,24 +23,20 @@ public class RedirectService {
     private final RedirectLookupCacheRepository redirectLookupCacheRepository;
     private final NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository;
     private final RedirectLookupPolicy redirectLookupPolicy;
-    private final Counter redirectCacheHitCounter;
-    private final Counter redirectCacheMissCounter;
-    private final Counter redirectDbFallbackCounter;
+    private final ShortLinkMetrics shortLinkMetrics;
 
     public RedirectService(ShortLinkRepository shortLinkRepository,
                            ClickEventPublisher clickEventPublisher,
                            RedirectLookupCacheRepository redirectLookupCacheRepository,
                            NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository,
                            RedirectLookupPolicy redirectLookupPolicy,
-                           MeterRegistry meterRegistry) {
+                           ShortLinkMetrics shortLinkMetrics) {
         this.shortLinkRepository = shortLinkRepository;
         this.clickEventPublisher = clickEventPublisher;
         this.redirectLookupCacheRepository = redirectLookupCacheRepository;
         this.negativeRedirectLookupCacheRepository = negativeRedirectLookupCacheRepository;
         this.redirectLookupPolicy = redirectLookupPolicy;
-        this.redirectCacheHitCounter = meterRegistry.counter("redirect.lookup.cache.hit.count");
-        this.redirectCacheMissCounter = meterRegistry.counter("redirect.lookup.cache.miss.count");
-        this.redirectDbFallbackCounter = meterRegistry.counter("redirect.lookup.db.fallback.count");
+        this.shortLinkMetrics = shortLinkMetrics;
     }
 
     @Transactional
@@ -90,8 +84,11 @@ public class RedirectService {
         Instant now = Instant.now();
 
         Optional<NegativeRedirectReason> negativeCachedReason = negativeRedirectLookupCacheRepository.findByShortCode(shortCode);
+        if (negativeCachedReason.isEmpty()) {
+            shortLinkMetrics.incrementNegativeCacheMiss();
+        }
         if (negativeCachedReason.isPresent()) {
-            redirectCacheHitCounter.increment();
+            shortLinkMetrics.incrementNegativeCacheHit();
             log.info("Redirect negative cache hit. shortCode={}, reason={}", shortCode, negativeCachedReason.get());
             throw linkNotFoundException();
         }
@@ -99,7 +96,7 @@ public class RedirectService {
         Optional<RedirectLookupCacheRepository.RedirectLookupCacheEntry> cached = redirectLookupCacheRepository.findByShortCode(shortCode);
 
         if (cached.isPresent() && redirectLookupPolicy.evaluate(cached.get(), now) == RedirectLookupState.REDIRECTABLE) {
-            redirectCacheHitCounter.increment();
+            shortLinkMetrics.incrementRedirectCacheHit();
             log.info("Redirect lookup cache hit. shortCode={}", shortCode);
             RedirectLookupCacheRepository.RedirectLookupCacheEntry entry = cached.get();
             return new ResolvedRedirectTarget(entry.shortLinkId(), entry.originalUrl());
@@ -109,9 +106,9 @@ public class RedirectService {
             invalidateRedirectLookupCache(shortCode);
         }
 
-        redirectCacheMissCounter.increment();
+        shortLinkMetrics.incrementRedirectCacheMiss();
         log.info("Redirect lookup cache miss. shortCode={}", shortCode);
-        redirectDbFallbackCounter.increment();
+        shortLinkMetrics.incrementRedirectDbFallback();
         log.info("Redirect lookup DB fallback. shortCode={}", shortCode);
 
         Optional<ShortLink> shortLinkOptional = shortLinkRepository.findByShortCode(shortCode);

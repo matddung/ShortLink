@@ -1,5 +1,6 @@
 package com.studyjun.backend.link.clickevent;
 
+import com.studyjun.backend.link.ShortLinkMetrics;
 import com.studyjun.backend.link.ShortLinkRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,18 +20,22 @@ public class ClickCountFlushWorker {
     private final ClickCountBufferService clickCountBufferService;
     private final ShortLinkRepository shortLinkRepository;
     private final Duration flushLockTtl;
+    private final ShortLinkMetrics shortLinkMetrics;
 
     public ClickCountFlushWorker(ClickCountBufferService clickCountBufferService,
                                  ShortLinkRepository shortLinkRepository,
-                                 @org.springframework.beans.factory.annotation.Value("${app.analytics.flush.lock-ttl-ms:30000}") long flushLockTtlMs) {
+                                 @org.springframework.beans.factory.annotation.Value("${app.analytics.flush.lock-ttl-ms:30000}") long flushLockTtlMs,
+                                 ShortLinkMetrics shortLinkMetrics) {
         this.clickCountBufferService = clickCountBufferService;
         this.shortLinkRepository = shortLinkRepository;
         this.flushLockTtl = Duration.ofMillis(flushLockTtlMs);
+        this.shortLinkMetrics = shortLinkMetrics;
     }
 
     @Scheduled(fixedDelayString = "${app.analytics.flush.fixed-delay-ms:5000}")
     @Transactional
     public void flush() {
+        shortLinkMetrics.incrementFlushExecution();
         String lockToken = UUID.randomUUID().toString();
         if (!clickCountBufferService.tryAcquireFlushLock(lockToken, flushLockTtl)) {
             log.debug("Skipping click-count flush because another worker already holds the flush lock.");
@@ -68,8 +73,11 @@ public class ClickCountFlushWorker {
                 return;
             }
 
+            shortLinkMetrics.incrementFlushSuccess();
+            shortLinkMetrics.addFlushDelta(delta);
             log.info("Flushed buffered click counts. shortLinkId={}, delta={}", shortLinkId, delta);
         } catch (RuntimeException ex) {
+            shortLinkMetrics.incrementFlushFailure();
             restoreBufferedCountOnFailure(key, delta, ex);
             log.error("Failed to flush buffered click-count key. key={}", key, ex);
         }

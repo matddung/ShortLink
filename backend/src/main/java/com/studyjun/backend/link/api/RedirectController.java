@@ -1,5 +1,6 @@
 package com.studyjun.backend.link.api;
 
+import com.studyjun.backend.link.ShortLinkMetrics;
 import com.studyjun.backend.link.application.redirect.LinkRedirectService;
 import com.studyjun.backend.link.support.GeoResolver;
 import com.studyjun.backend.link.support.ReferrerResolver;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 public class RedirectController {
@@ -24,32 +26,40 @@ public class RedirectController {
     private final GeoResolver geoResolver;
     private final ReferrerResolver referrerResolver;
     private final VisitorFingerprintService visitorFingerprintService;
+    private final ShortLinkMetrics shortLinkMetrics;
 
     public RedirectController(LinkRedirectService linkRedirectService,
                               @Value("${spring.application.name:shortlink-backend}") String analyticsSource,
                               RequestIdResolver requestIdResolver,
                               GeoResolver geoResolver,
                               ReferrerResolver referrerResolver,
-                              VisitorFingerprintService visitorFingerprintService) {
+                              VisitorFingerprintService visitorFingerprintService,
+                              ShortLinkMetrics shortLinkMetrics) {
         this.linkRedirectService = linkRedirectService;
         this.analyticsSource = analyticsSource;
         this.requestIdResolver = requestIdResolver;
         this.geoResolver = geoResolver;
         this.referrerResolver = referrerResolver;
         this.visitorFingerprintService = visitorFingerprintService;
+        this.shortLinkMetrics = shortLinkMetrics;
     }
 
     @GetMapping("/s/{shortCode}")
     public ResponseEntity<Void> redirect(@PathVariable String shortCode, HttpServletRequest request) {
-        String countryCode = geoResolver.resolveCountryCode(request);
-        String referrer = referrerResolver.resolve(request);
-        String visitorKey = visitorFingerprintService.buildVisitorKey(request);
-        String requestId = requestIdResolver.resolve(request);
+        long startNanos = System.nanoTime();
+        try {
+            String countryCode = geoResolver.resolveCountryCode(request);
+            String referrer = referrerResolver.resolve(request);
+            String visitorKey = visitorFingerprintService.buildVisitorKey(request);
+            String requestId = requestIdResolver.resolve(request);
 
-        String originalUrl = linkRedirectService.resolveOriginalUrl(shortCode, countryCode, referrer, visitorKey, requestId, analyticsSource);
-        return ResponseEntity.status(302)
-                .header(HttpHeaders.LOCATION, URI.create(originalUrl).toString())
-                .build();
+            String originalUrl = linkRedirectService.resolveOriginalUrl(shortCode, countryCode, referrer, visitorKey, requestId, analyticsSource);
+            return ResponseEntity.status(302)
+                    .header(HttpHeaders.LOCATION, URI.create(originalUrl).toString())
+                    .build();
+        } finally {
+            shortLinkMetrics.redirectLatencyTimer().record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
+        }
     }
 
     @GetMapping("/s-select/{shortCode}")

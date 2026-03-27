@@ -11,7 +11,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: false
     open-in-view: false
   kafka:
@@ -50,3 +50,18 @@ app:
   redirect-cache:
     ttl-seconds: 300
     negative-ttl-seconds: 60
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      role: ${app.role}
+    distribution:
+      percentiles-histogram:
+        shortlink.api.redirect.latency: true
+      percentiles:
+        shortlink.api.redirect.latency: 0.5,0.95,0.99

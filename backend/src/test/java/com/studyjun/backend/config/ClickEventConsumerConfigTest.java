@@ -1,8 +1,10 @@
 package com.studyjun.backend.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.studyjun.backend.link.ShortLinkMetrics;
 import com.studyjun.backend.link.clickevent.ClickEventAnalyticsService;
 import com.studyjun.backend.link.clickevent.KafkaClickEventConsumer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -17,7 +19,9 @@ class ClickEventConsumerConfigTest {
             .withUserConfiguration(KafkaClickEventConsumer.class, ClickEventConsumerConfig.class)
             .withBean(ObjectMapper.class, ObjectMapper::new)
             .withBean(ClickEventAnalyticsService.class, () -> mock(ClickEventAnalyticsService.class))
-            .withBean("kafkaTemplate", KafkaTemplate.class, () -> mock(KafkaTemplate.class));
+            .withBean("kafkaTemplate", KafkaTemplate.class, () -> mock(KafkaTemplate.class))
+            .withBean(SimpleMeterRegistry.class, SimpleMeterRegistry::new)
+            .withBean(ShortLinkMetrics.class, () -> new ShortLinkMetrics(new SimpleMeterRegistry()));
 
     @Test
     void doesNotRegisterConsumerBeansByDefault() {

@@ -1,5 +1,6 @@
 package com.studyjun.backend.link.clickevent;
 
+import com.studyjun.backend.link.ShortLinkMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -10,10 +11,14 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
 
     private final KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate;
     private final String topic;
+    private final ShortLinkMetrics shortLinkMetrics;
 
-    public KafkaClickEventPublisher(KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate, String topic) {
+    public KafkaClickEventPublisher(KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate,
+                                    String topic,
+                                    ShortLinkMetrics shortLinkMetrics) {
         this.kafkaTemplate = kafkaTemplate;
         this.topic = topic;
+        this.shortLinkMetrics = shortLinkMetrics;
     }
 
     @Override
@@ -22,6 +27,7 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
             kafkaTemplate.send(topic, message.shortCode(), message)
                     .whenComplete((result, ex) -> {
                         if (ex != null) {
+                            shortLinkMetrics.incrementKafkaPublishFailure();
                             log.error(
                                     "Failed to publish click event. eventId={}, shortCode={}, requestId={}",
                                     message.eventId(),
@@ -30,6 +36,7 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
                                     ex
                             );
                         } else {
+                            shortLinkMetrics.incrementKafkaPublishSuccess();
                             log.info(
                                     "Published click event. eventId={}, shortCode={}, requestId={}, partition={}, offset={}",
                                     message.eventId(),
@@ -41,6 +48,7 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
                         }
                     });
         } catch (Exception e) {
+            shortLinkMetrics.incrementKafkaPublishFailure();
             log.error(
                     "Kafka send threw before async completion. eventId={}, shortCode={}, requestId={}",
                     message.eventId(),
