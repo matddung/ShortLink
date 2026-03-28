@@ -27,4 +27,24 @@ public interface ShortLinkRepository extends JpaRepository<ShortLink, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update ShortLink s set s.totalClicks = s.totalClicks + :delta where s.id = :shortLinkId")
     int incrementTotalClicks(@Param("shortLinkId") Long shortLinkId, @Param("delta") long delta);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update ShortLink s set s.totalClicks = :totalClicks where s.id = :shortLinkId")
+    int overwriteTotalClicks(@Param("shortLinkId") Long shortLinkId, @Param("totalClicks") long totalClicks);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            update short_links s
+               set total_clicks = coalesce((
+                   select count(*)
+                     from link_click_events e
+                    where e.short_link_id = s.id
+               ), 0)
+             where s.total_clicks <> coalesce((
+                   select count(*)
+                     from link_click_events e
+                    where e.short_link_id = s.id
+               ), 0)
+            """, nativeQuery = true)
+    int reconcileTotalClicksFromEvents();
 }
