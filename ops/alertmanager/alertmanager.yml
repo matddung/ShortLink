@@ -1,0 +1,16 @@
+route:
+  group_by: [alertname, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+  receiver: default-log
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: default-log
+
+receivers:
+  - name: default-log
+    webhook_configs:
+      - url: http://127.0.0.1:65535
+        send_resolved: true

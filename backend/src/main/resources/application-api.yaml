@@ -11,11 +11,13 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     open-in-view: false
+  flyway:
+    enabled: true
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     producer:
       properties:
         max.block.ms: 300
@@ -25,8 +27,8 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
       connect-timeout: 500ms
       timeout: 500ms
 
@@ -38,10 +40,11 @@ jwt:
 app:
   role: api
   auth:
-    secure-cookie: false
-    same-site: Lax
+    secure-cookie: ${APP_AUTH_SECURE_COOKIE:false}
+    same-site: ${APP_AUTH_SAME_SITE:Lax}
+    cookie-domain: ${APP_AUTH_COOKIE_DOMAIN:}
   cors:
-    allowed-origins: http://localhost:3000
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
   analytics:
     kafka:
       producer-enabled: true

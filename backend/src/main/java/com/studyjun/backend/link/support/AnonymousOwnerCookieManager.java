@@ -15,13 +15,16 @@ public class AnonymousOwnerCookieManager {
     private final boolean secureCookie;
     private final String sameSite;
     private final long anonymousExpirationDays;
+    private final String cookieDomain;
 
     public AnonymousOwnerCookieManager(@Value("${app.auth.secure-cookie:true}") boolean secureCookie,
                                        @Value("${app.auth.same-site:Lax}") String sameSite,
-                                       @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
+                                       @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays,
+                                       @Value("${app.auth.cookie-domain:}") String cookieDomain) {
         this.secureCookie = secureCookie;
         this.sameSite = sameSite;
         this.anonymousExpirationDays = anonymousExpirationDays;
+        this.cookieDomain = cookieDomain;
     }
 
     public String normalizeOwnerKey(String ownerKey) {
@@ -32,13 +35,17 @@ public class AnonymousOwnerCookieManager {
     }
 
     public String createOwnerCookie(String ownerKey) {
-        return ResponseCookie.from(ANONYMOUS_OWNER_COOKIE, ownerKey)
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(ANONYMOUS_OWNER_COOKIE, ownerKey)
                 .httpOnly(true)
                 .secure(secureCookie)
                 .sameSite(sameSite)
                 .path("/")
-                .maxAge(Duration.ofDays(anonymousExpirationDays))
-                .build()
-                .toString();
+                .maxAge(Duration.ofDays(anonymousExpirationDays));
+
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            builder.domain(cookieDomain);
+        }
+
+        return builder.build().toString();
     }
 }

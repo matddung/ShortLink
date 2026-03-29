@@ -23,18 +23,21 @@ public class AuthController {
     private final boolean secureCookie;
     private final String sameSite;
     private final long refreshTokenExpirationMs;
+    private final String cookieDomain;
     private final LinkCommandService linkCommandService;
 
     public AuthController(AuthService authService,
                           LinkCommandService linkCommandService,
                           @Value("${app.auth.secure-cookie:true}") boolean secureCookie,
                           @Value("${app.auth.same-site:Lax}") String sameSite,
-                          @Value("${jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs) {
+                          @Value("${jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs,
+                          @Value("${app.auth.cookie-domain:}") String cookieDomain) {
         this.authService = authService;
         this.linkCommandService = linkCommandService;
         this.secureCookie = secureCookie;
         this.sameSite = sameSite;
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;
+        this.cookieDomain = cookieDomain;
     }
 
     @PostMapping("/signup")
@@ -105,35 +108,41 @@ public class AuthController {
     }
 
     private String createRefreshTokenCookie(String refreshToken) {
-        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, refreshToken)
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
                 .secure(secureCookie)
                 .sameSite(sameSite)
                 .path("/")
-                .maxAge(Duration.ofMillis(refreshTokenExpirationMs))
-                .build();
-        return cookie.toString();
+                .maxAge(Duration.ofMillis(refreshTokenExpirationMs));
+        applyCookieDomain(builder);
+        return builder.build().toString();
     }
 
     private String clearAnonymousOwnerCookie() {
-        ResponseCookie cookie = ResponseCookie.from(ANONYMOUS_OWNER_COOKIE_NAME, "")
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(ANONYMOUS_OWNER_COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(secureCookie)
                 .sameSite(sameSite)
                 .path("/")
-                .maxAge(Duration.ZERO)
-                .build();
-        return cookie.toString();
+                .maxAge(Duration.ZERO);
+        applyCookieDomain(builder);
+        return builder.build().toString();
     }
 
     private String clearRefreshTokenCookie() {
-        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(secureCookie)
                 .sameSite(sameSite)
                 .path("/")
-                .maxAge(Duration.ZERO)
-                .build();
-        return cookie.toString();
+                .maxAge(Duration.ZERO);
+        applyCookieDomain(builder);
+        return builder.build().toString();
+    }
+
+    private void applyCookieDomain(ResponseCookie.ResponseCookieBuilder builder) {
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            builder.domain(cookieDomain);
+        }
     }
 }
