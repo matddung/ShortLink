@@ -9,7 +9,7 @@ import type {
   CreateLinkFormData,
 } from './types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.qwe123.shop/api';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface BackendEnvelope<T> {
