@@ -32,7 +32,6 @@ services:
     ports:
       - "6379:6379"
 
-  # Single-node Kafka (dev/toy usage)
   kafka:
     image: bitnami/kafka:3.7
     container_name: shortlink-kafka

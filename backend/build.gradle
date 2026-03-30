@@ -47,7 +47,7 @@ dependencies {
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 
 	implementation 'org.flywaydb:flyway-core'
-	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql:10.17.0'
 }
 
 tasks.named('test') {
