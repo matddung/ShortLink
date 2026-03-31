@@ -5,10 +5,10 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: consumer
-      DB_URL: ${DB_URL:?set DB_URL for shared database}
-      DB_USERNAME: ${DB_USERNAME:?set DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?set KAFKA_BOOTSTRAP_SERVERS}
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
       JWT_SECRET: ${JWT_SECRET}
@@ -24,19 +24,16 @@ services:
     ports:
       - "8081:8081"
 
-  # Optional API replica for scale/HA.
-  # Enable only when you have LB routing and per-node metrics strategy.
   api:
     image: 01055861376/shortlink-backend:latest
-    container_name: shortlink-api-worker
+    container_name: shortlink-api
     restart: unless-stopped
-    profiles: ["api-replica"]
     environment:
       SPRING_PROFILES_ACTIVE: api
-      DB_URL: ${DB_URL:?set DB_URL for shared database}
-      DB_USERNAME: ${DB_USERNAME:?set DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?set KAFKA_BOOTSTRAP_SERVERS}
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
       JWT_SECRET: ${JWT_SECRET}

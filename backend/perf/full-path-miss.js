@@ -39,7 +39,7 @@ function randomMissingCode() {
 export default function () {
   const code = randomMissingCode();
 
-  const response = http.get(`${BASE_URL}/s/${code}`, {
+  const response = http.get(`${BASE_URL}/api/s/${code}`, {
     redirects: 0,
     tags: {
       endpoint: 'redirect-miss-full-path',

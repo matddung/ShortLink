@@ -51,7 +51,7 @@ export const options = {
 };
 
 export default function () {
-  const response = http.get(`${BASE_URL}/s-select/${SHORT_CODE}`, {
+  const response = http.get(`${BASE_URL}/api/s-select/${SHORT_CODE}`, {
     redirects: 0,
     tags: {
       endpoint: 'redirect-select-only',

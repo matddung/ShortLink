@@ -1,20 +1,29 @@
-server {
-  listen 80;
-  server_name _;
+groups:
+  - name: service-health
+    rules:
+      - alert: ApiInstanceDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API instance down"
+          description: "API metrics endpoint is not reachable for more than 2 minutes."
 
-  location /api/ {
-    proxy_pass http://api:8080/api/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
+      - alert: ConsumerInstanceDown
+        expr: up{job="consumer"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Consumer instance down"
+          description: "Consumer metrics endpoint is not reachable for more than 2 minutes."
 
-  location / {
-    proxy_pass http://frontend:3000/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-}
+      - alert: NodeExporterDown
+        expr: up{job="node_exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node exporter down"
+          description: "Node exporter is unreachable."

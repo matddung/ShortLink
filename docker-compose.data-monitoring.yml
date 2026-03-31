@@ -4,13 +4,13 @@ services:
     container_name: shortlink-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-shortlink}
-      POSTGRES_USER: ${POSTGRES_USER:-shortlink}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shortlink} -d ${POSTGRES_DB:-shortlink}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -32,7 +32,6 @@ services:
     ports:
       - "6379:6379"
 
-  # Single-node Kafka (dev/toy usage)
   kafka:
     image: bitnami/kafka:3.7
     container_name: shortlink-kafka
@@ -41,7 +40,7 @@ services:
       KAFKA_CFG_NODE_ID: 1
       KAFKA_CFG_PROCESS_ROLES: broker,controller
       KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:?set KAFKA_ADVERTISED_HOST to infra private IP or DNS}:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST}:9092
       KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -102,8 +101,8 @@ services:
     container_name: shortlink-prometheus
     restart: unless-stopped
     environment:
-      API_METRICS_TARGET: ${API_METRICS_TARGET:?set API_METRICS_TARGET (ex. <app-ec2-private-ip>:8080)}
-      CONSUMER_METRICS_TARGET: ${CONSUMER_METRICS_TARGET:?set CONSUMER_METRICS_TARGET (ex. <app-ec2-private-ip>:8081)}
+      API_METRICS_TARGET: ${API_METRICS_TARGET}
+      CONSUMER_METRICS_TARGET: ${CONSUMER_METRICS_TARGET}
       NODE_EXPORTER_TARGET: ${NODE_EXPORTER_TARGET:-node-exporter:9100}
       CADVISOR_TARGET: ${CADVISOR_TARGET:-cadvisor:8080}
       ALERTMANAGER_TARGET: ${ALERTMANAGER_TARGET:-alertmanager:9093}
@@ -156,11 +155,11 @@ services:
     container_name: shortlink-grafana
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set in environment}
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
       GF_SERVER_HTTP_PORT: 3000
       GF_SERVER_DOMAIN: ${GF_SERVER_DOMAIN:-infra.qwe123.shop}
-      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-https://infra.qwe123.shop}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://infra.qwe123.shop}
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:

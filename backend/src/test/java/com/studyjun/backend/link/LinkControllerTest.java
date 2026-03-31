@@ -58,7 +58,7 @@ class LinkControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.originalUrl").value("https://example.com/very/long/path"))
                 .andExpect(jsonPath("$.data.shortCode").isNotEmpty())
-                .andExpect(jsonPath("$.data.shortUrl").value(containsString("/s/")))
+                .andExpect(jsonPath("$.data.shortUrl").value(containsString("/api/s/")))
                 .andExpect(header().string("Set-Cookie", containsString("anonymous_owner=")))
                 .andReturn();
 
@@ -67,7 +67,7 @@ class LinkControllerTest {
                 .path("shortCode")
                 .asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode)
                         .header("X-Request-Id", "req-anonymous-redirect"))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", "https://example.com/very/long/path"));
@@ -162,11 +162,11 @@ class LinkControllerTest {
                 .path("shortCode")
                 .asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode)
                         .header("X-Request-Id", "req-idempotent-redirect"))
                 .andExpect(status().isFound());
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode)
                         .header("X-Request-Id", "req-idempotent-redirect"))
                 .andExpect(status().isFound());
 
@@ -211,7 +211,7 @@ class LinkControllerTest {
                 .path("shortCode")
                 .asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode))
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", "https://dashboard.example.com/path"));
 
@@ -298,7 +298,7 @@ class LinkControllerTest {
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
         String shortCode = created.path("shortCode").asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode)
                         .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8")
                         .header("User-Agent", "lang-agent")
                         .header("X-Forwarded-For", "203.0.113.30"))
@@ -340,7 +340,7 @@ class LinkControllerTest {
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
         String shortCode = created.path("shortCode").asText();
 
-        mockMvc.perform(get("/s/{shortCode}", shortCode)
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode)
                         .header("Accept-Language", "ko")
                         .header("User-Agent", "lang-only-agent")
                         .header("X-Forwarded-For", "203.0.113.31"))

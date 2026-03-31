@@ -76,6 +76,6 @@ public class LinkQueryService {
     }
 
     private String buildShortUrl(String shortCode) {
-        return appBaseUrl + "/s/" + shortCode;
+        return appBaseUrl + "/api/s/" + shortCode;
     }
 }

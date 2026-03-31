@@ -67,9 +67,9 @@ echo "mode,experiment_kind,phase,target_rps,achieved_rps,http_reqs,dropped_itera
 
 get_runner_and_script() {
   if [[ "$MODE" == "select-only" ]]; then
-    echo "backend/perf/run-select-only-with-monitoring.sh backend/perf/select-only-redirect-hot.js /s-select/${SHORT_CODE}"
+    echo "backend/perf/run-select-only-with-monitoring.sh backend/perf/select-only-redirect-hot.js /api/s-select/${SHORT_CODE}"
   else
-    echo "backend/perf/run-redirect-with-monitoring.sh backend/perf/redirect-load-test.js /s/${SHORT_CODE}"
+    echo "backend/perf/run-redirect-with-monitoring.sh backend/perf/redirect-load-test.js /api/s/${SHORT_CODE}"
   fi
 }
 

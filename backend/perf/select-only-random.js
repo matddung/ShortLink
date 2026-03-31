@@ -59,7 +59,7 @@ function randomCode() {
 export default function () {
   const code = randomCode();
 
-  const response = http.get(`${BASE_URL}/s-select/${code}`, {
+  const response = http.get(`${BASE_URL}/api/s-select/${code}`, {
     redirects: 0,
     tags: {
       endpoint: 'select-only-random-traffic',

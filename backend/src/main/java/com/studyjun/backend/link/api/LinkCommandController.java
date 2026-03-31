@@ -10,12 +10,10 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.CookieValue;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
+@RequestMapping("/api/links")
 public class LinkCommandController {
 
     private static final String ANONYMOUS_OWNER_COOKIE = "anonymous_owner";
@@ -32,7 +30,7 @@ public class LinkCommandController {
         this.anonymousOwnerCookieManager = anonymousOwnerCookieManager;
     }
 
-    @PostMapping("/api/links/anonymous")
+    @PostMapping("/anonymous")
     public ResponseEntity<ApiResponse<LinkResponse.ShortLinkResponse>> createAnonymous(
             @Valid @RequestBody LinkRequest.CreateAnonymousRequest request,
             @CookieValue(name = ANONYMOUS_OWNER_COOKIE, required = false) String ownerKey
@@ -45,7 +43,7 @@ public class LinkCommandController {
                 .body(ApiResponse.ok(response));
     }
 
-    @PostMapping("/api/links")
+    @PostMapping
     public ApiResponse<LinkResponse.ShortLinkResponse> createMyLink(
             @Valid @RequestBody LinkRequest.CreateLinkRequest request,
             Authentication authentication
