@@ -1,7 +1,6 @@
 services:
   api:
-    build:
-      context: ./backend
+    image: 01055861376/shortlink-backend:latest
     container_name: shortlink-api
     restart: unless-stopped
     environment:
@@ -12,7 +11,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?set KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TOKEN_EXPIRATION_MS: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:-3600000}
       JWT_REFRESH_TOKEN_EXPIRATION_MS: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:-1209600000}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://qwe123.shop}
@@ -30,10 +29,7 @@ services:
       - "8080:8080"
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.qwe123.shop/api}
+    image: 01055861376/shortlink-frontend:latest
     container_name: shortlink-frontend
     restart: unless-stopped
     environment:

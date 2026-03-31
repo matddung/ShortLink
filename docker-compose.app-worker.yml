@@ -1,7 +1,6 @@
 services:
   consumer:
-    build:
-      context: ./backend
+    image: 01055861376/shortlink-backend:latest
     container_name: shortlink-consumer
     restart: unless-stopped
     environment:
@@ -12,7 +11,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?set KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TOKEN_EXPIRATION_MS: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:-3600000}
       JWT_REFRESH_TOKEN_EXPIRATION_MS: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:-1209600000}
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
@@ -28,8 +27,7 @@ services:
   # Optional API replica for scale/HA.
   # Enable only when you have LB routing and per-node metrics strategy.
   api:
-    build:
-      context: ./backend
+    image: 01055861376/shortlink-backend:latest
     container_name: shortlink-api-worker
     restart: unless-stopped
     profiles: ["api-replica"]
@@ -41,7 +39,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?set KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TOKEN_EXPIRATION_MS: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:-3600000}
       JWT_REFRESH_TOKEN_EXPIRATION_MS: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:-1209600000}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://qwe123.shop}

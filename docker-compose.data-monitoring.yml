@@ -32,6 +32,7 @@ services:
     ports:
       - "6379:6379"
 
+  # Single-node Kafka (dev/toy usage)
   kafka:
     image: bitnami/kafka:3.7
     container_name: shortlink-kafka
@@ -158,6 +159,8 @@ services:
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set in environment}
       GF_SERVER_HTTP_PORT: 3000
+      GF_SERVER_DOMAIN: ${GF_SERVER_DOMAIN:-infra.qwe123.shop}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-https://infra.qwe123.shop}
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
