@@ -1,6 +1,6 @@
 services:
   consumer:
-    image: 01055861376/shortlink-backend:latest
+    image: 01055861376/shortlink-backend:1.0.0
     container_name: shortlink-consumer
     restart: unless-stopped
     environment:
@@ -17,7 +17,7 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
       MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health >/dev/null"]
+      test: ["CMD-SHELL", "nc -z localhost 8081"]
       interval: 15s
       timeout: 5s
       retries: 20
@@ -25,7 +25,7 @@ services:
       - "8081:8081"
 
   api:
-    image: 01055861376/shortlink-backend:latest
+    image: 01055861376/shortlink-backend:1.0.0
     container_name: shortlink-api
     restart: unless-stopped
     environment:
@@ -46,7 +46,7 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
       MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health >/dev/null"]
+      test: ["CMD-SHELL", "nc -z localhost 8080"]
       interval: 15s
       timeout: 5s
       retries: 20

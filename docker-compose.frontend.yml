@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: 01055861376/shortlink-frontend:latest
+    image: 01055861376/shortlink-frontend:1.0.0
     container_name: shortlink-frontend
     restart: unless-stopped
     environment:
