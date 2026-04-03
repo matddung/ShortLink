@@ -3,6 +3,7 @@ services:
     image: postgres:17
     container_name: shortlink-postgres
     restart: unless-stopped
+    command: ["postgres", "-c", "listen_addresses=*"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -32,7 +33,7 @@ services:
     ports:
       - "6379:6379"
 
- kafka:
+  kafka:
     image: apache/kafka:4.1.2
     container_name: shortlink-kafka
     restart: unless-stopped
@@ -51,7 +52,7 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -100,50 +101,15 @@ services:
     image: prom/prometheus:v2.55.1
     container_name: shortlink-prometheus
     restart: unless-stopped
-    environment:
-      API_METRICS_TARGET: ${API_METRICS_TARGET}
-      CONSUMER_METRICS_TARGET: ${CONSUMER_METRICS_TARGET}
-      NODE_EXPORTER_TARGET: ${NODE_EXPORTER_TARGET:-node-exporter:9100}
-      CADVISOR_TARGET: ${CADVISOR_TARGET:-cadvisor:8080}
-      ALERTMANAGER_TARGET: ${ALERTMANAGER_TARGET:-alertmanager:9093}
+    ports:
+      - "9090:9090"
     volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
-    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - |
-        cat > /etc/prometheus/prometheus.yml <<'PROM'
-        scrape_interval: 15s
-        evaluation_interval: 15s
-
-      rule_files:
-        - /etc/prometheus/alerts.yml
-
-      alerting:
-        alertmanagers:
-          - static_configs:
-              - targets: ['${ALERTMANAGER_TARGET}']
-
-      scrape_configs:
-        - job_name: 'api'
-          metrics_path: /actuator/prometheus
-          static_configs:
-            - targets: ['${API_METRICS_TARGET}']
-
-        - job_name: 'consumer'
-          metrics_path: /actuator/prometheus
-          static_configs:
-            - targets: ['${CONSUMER_METRICS_TARGET}']
-
-        - job_name: 'node_exporter'
-          static_configs:
-            - targets: ['${NODE_EXPORTER_TARGET}']
-
-        - job_name: 'cadvisor'
-          static_configs:
-            - targets: ['${CADVISOR_TARGET}']
-      PROM
-      exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
     depends_on:
       alertmanager:
         condition: service_started
@@ -163,7 +129,7 @@ services:
     depends_on:
       - prometheus
     ports:
-      - "127.0.0.1:3001:3000"
+      - "3001:3000"
 
 volumes:
   postgres_data:

@@ -37,6 +37,7 @@ jwt:
 
 app:
   role: consumer
+  base-url: https://qwe123.shop
   auth:
     secure-cookie: ${APP_AUTH_SECURE_COOKIE:false}
     same-site: ${APP_AUTH_SAME_SITE:Lax}

@@ -14,7 +14,7 @@ const ensureApiSuffix = (baseUrl: string): string => {
   return normalized.endsWith('/api') ? normalized : `${normalized}/api`;
 };
 
-const API_BASE_URL = ensureApiSuffix(process.env.NEXT_PUBLIC_API_URL || 'https://api.qwe123.shop/api');
+const API_BASE_URL = ensureApiSuffix(process.env.NEXT_PUBLIC_API_URL || 'https://qwe123.shop/api');
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface BackendEnvelope<T> {

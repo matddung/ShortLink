@@ -20,7 +20,7 @@ public class LinkQueryService {
                             AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy,
                             RedirectService redirectService,
                             LinkStatsService linkStatsService,
-                            @Value("${app.base-url:http://localhost:8080}") String appBaseUrl) {
+                            @Value("${app.base-url:https://qwe123.shop}") String appBaseUrl) {
         this.shortLinkRepository = shortLinkRepository;
         this.anonymousLinkExpiryPolicy = anonymousLinkExpiryPolicy;
         this.redirectService = redirectService;

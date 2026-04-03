@@ -25,7 +25,7 @@ public class LinkCommandService {
                               UrlValidationService urlValidationService,
                               ShortCodeService shortCodeService,
                               RedirectService redirectService,
-                              @Value("${app.base-url:http://localhost:8080}") String appBaseUrl,
+                              @Value("${app.base-url:https://qwe123.shop}") String appBaseUrl,
                               @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
         this.anonymousLinkExpiryPolicy = anonymousLinkExpiryPolicy;
