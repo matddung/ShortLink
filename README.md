@@ -1,6 +1,7 @@
 # 🚀 ShortLink
+[사이트 바로가기](https://qwe123.shop/)
 
-> 대규모 트래픽에서 병목이 되던 단축 URL 리다이렉트 경로를, **Kafka + Redis 기반 비동기/캐시 아키텍처**로 재구성해 처리량과 응답 속도를 개선한 URL Shortener 프로젝트
+> 고부하/트래픽 급증 상황에서 병목이 되던 단축 URL 리다이렉트 경로를, **Kafka + Redis 기반 비동기/캐시 아키텍처**로 재구성해 처리량과 응답 속도를 개선한 URL Shortener 프로젝트
 
 ---
 
@@ -113,6 +114,26 @@ lookup을 Redis 중심으로 전환해 DB를 fallback layer로만 사용했다.
 * strong consistency 일부 포기 (eventual consistency 허용)
 * 캐시 정합성/TTL/무효화 전략 운영 복잡도 증가
 * Kafka/Redis 운영 비용 추가
+
+### 운영 환경 대체안 (Production)
+
+로컬/개발 환경에서는 Docker Compose 기반 **PostgreSQL + Redis + Kafka**를 사용하고,
+운영 환경에서는 아래와 같이 매니지드 서비스로 대체할 수 있다.
+
+* **PostgreSQL → Amazon RDS for PostgreSQL**
+* **Redis → Amazon ElastiCache for Redis**
+* **Kafka → Amazon MSK (Managed Streaming for Apache Kafka)**
+
+대체 이유:
+
+* **운영 안정성 향상**: 자동 장애 감지/복구, Multi-AZ, 백업/복원 등 고가용성 기능을 기본 제공
+* **운영 부담 감소**: 패치, 버전 관리, 모니터링, 장애 대응 등 데이터 계층 운영 작업을 매니지드 서비스가 대체
+* **확장성 확보**: 트래픽 증가 시 스펙 업/아웃, 복제본/브로커 확장 등 용량 대응이 비교적 용이
+* **보안/거버넌스 강화**: VPC 연동, IAM/보안그룹, KMS 암호화, 감사 로그 등 클라우드 표준 보안 체계 활용
+* **핵심 기능 개발 집중**: 인프라 운영보다 애플리케이션 성능/기능 개선에 개발 리소스를 집중 가능
+
+즉, 이 프로젝트의 핵심 설계(비동기 이벤트 + 캐시 중심 hot path)는 그대로 유지하면서,
+운영 단계에서는 관리형 데이터 플랫폼으로 전환해 **신뢰성/운영 효율/확장성**을 높이는 전략이다.
 
 ---
 
