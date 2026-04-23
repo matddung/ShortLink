@@ -1,5 +1,6 @@
 # 🚀 ShortLink
-[사이트 바로가기](https://qwe123.shop/)
+
+> 배포 환경에서 정상 동작까지 확인했지만, 현재는 비용 이슈로 배포를 중단한 상태입니다.
 
 > 고부하/트래픽 급증 상황에서 병목이 되던 단축 URL 리다이렉트 경로를, **Kafka + Redis 기반 비동기/캐시 아키텍처**로 재구성해 처리량과 응답 속도를 개선한 URL Shortener 프로젝트
 
@@ -16,6 +17,104 @@
     * Backend: Spring Boot (Java 17)
     * Database: PostgreSQL
     * Infra/Data: Redis, Kafka, Docker Compose, Prometheus, Alertmanager, Nginx
+
+---
+
+## 🧪 로컬에서 실행하는 방법
+
+### 1) 사전 준비
+
+* Docker / Docker Compose
+* Java 17
+* Node.js 20+ (권장)
+
+먼저 루트에서 예시 환경 파일을 복사한다.
+
+```bash
+cp .env.example .env
+```
+
+`.env`는 아래 명령으로 현재 셸에 로드해 사용할 수 있다.
+
+```bash
+set -a
+source .env
+set +a
+```
+
+### 2) 인프라 컨테이너 실행
+
+프로젝트 루트(`/ShortLink`)에서 아래 명령을 실행한다.
+
+```bash
+docker compose -f docker-compose.data-monitoring.yml up -d postgres redis kafka
+```
+
+필요 시 모니터링 스택도 함께 실행 가능하다.
+
+```bash
+docker compose -f docker-compose.data-monitoring.yml up -d
+```
+
+프론트엔드를 컨테이너로 실행하려면 아래 명령을 사용한다.
+
+```bash
+docker compose -f docker-compose.frontend.yml up -d
+```
+
+### 3) 백엔드 실행
+
+#### 왜 백엔드를 로컬 프로세스로 직접 실행했나?
+
+이 README는 **개발/디버깅 기준**으로 작성해서, 로그 확인·브레이크포인트·핫리로드가 쉬운 `./gradlew bootRun` 방식을 기본으로 안내했다.
+
+다만, 백엔드도 Docker Compose로 실행할 수 있다.
+
+#### 옵션 A) Docker Compose로 백엔드 실행 (이미지 기반)
+
+```bash
+docker compose -f docker-compose.api-consumer.yml up -d
+```
+
+#### 옵션 B) 로컬 프로세스로 백엔드 실행 (개발/디버깅 권장)
+
+백엔드는 `application-api.yaml` / `application-consumer.yaml`로 분리되어 있어, 로컬에서도 프로필을 나눠 각각 실행해야 한다.
+
+터미널 A (API 서버, 8080):
+
+```bash
+cd backend
+set -a && source ../.env && set +a
+SPRING_PROFILES_ACTIVE=api ./gradlew bootRun
+```
+
+터미널 B (Consumer, 8081):
+
+```bash
+cd backend
+set -a && source ../.env && set +a
+SPRING_PROFILES_ACTIVE=consumer ./gradlew bootRun
+```
+
+> 기본값으로 `localhost:5432(PostgreSQL)`, `localhost:6379(Redis)`, `localhost:9092(Kafka)`를 사용한다.
+
+### 4) 프론트엔드 실행
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+> 로컬 개발 모드에서는 API 기본 주소가 `http://localhost:8080/api`로 설정된다.
+
+### 5) 접속
+
+* 프론트엔드: `http://localhost:3000`
+* 백엔드 API: `http://localhost:8080` (`api` 프로필)
+* 백엔드 Consumer Actuator: `http://localhost:8081/actuator/health` (`consumer` 프로필)
+
+환경에 따라 포트/프로파일 설정이 다를 수 있으니, 각 서비스의 `.env` 및 설정 파일을 함께 확인하면 된다.
 
 ---
 
