@@ -14,7 +14,7 @@ const ensureApiSuffix = (baseUrl: string): string => {
   return normalized.endsWith('/api') ? normalized : `${normalized}/api`;
 };
 
-const defaultApiBaseUrl = process.env.NODE_ENV === 'production' ? 'https://qwe123.shop/api' : 'http://localhost:8080/api';
+const defaultApiBaseUrl = 'http://localhost:8080/api';
 const API_BASE_URL = ensureApiSuffix(process.env.NEXT_PUBLIC_API_URL || defaultApiBaseUrl);
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

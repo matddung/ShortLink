@@ -16,6 +16,7 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+    baseline-on-migrate: ${SPRING_FLYWAY_BASELINE_ON_MIGRATE:false}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     consumer:
@@ -37,7 +38,7 @@ jwt:
 
 app:
   role: consumer
-  base-url: https://qwe123.shop
+  base-url: ${APP_BASE_URL:http://localhost:8080}
   auth:
     secure-cookie: ${APP_AUTH_SECURE_COOKIE:false}
     same-site: ${APP_AUTH_SAME_SITE:Lax}

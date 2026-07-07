@@ -55,9 +55,15 @@ public class ClickEventAnalyticsService {
                 message.visitorKey()
         ));
 
-        long bufferedCount = clickCountBufferService.increment(shortLink.getId());
-        log.info("Persisted click event and buffered aggregate click increment. eventId={}, shortCode={}, requestId={}, bufferedCount={}",
-                message.eventId(), message.shortCode(), message.requestId(), bufferedCount);
+        try {
+            long bufferedCount = clickCountBufferService.increment(shortLink.getId());
+            log.info("Persisted click event and buffered aggregate click increment. eventId={}, shortCode={}, requestId={}, bufferedCount={}",
+                    message.eventId(), message.shortCode(), message.requestId(), bufferedCount);
+        } catch (RuntimeException ex) {
+            shortLinkRepository.incrementTotalClicks(shortLink.getId(), 1);
+            log.info("Persisted click event and directly incremented aggregate click count because Redis buffering is unavailable. eventId={}, shortCode={}, requestId={}",
+                    message.eventId(), message.shortCode(), message.requestId());
+        }
         return ProcessingResult.INSERTED;
     }
 

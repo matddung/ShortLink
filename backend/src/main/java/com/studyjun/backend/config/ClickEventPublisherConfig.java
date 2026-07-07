@@ -7,6 +7,7 @@ import com.studyjun.backend.link.clickevent.NoopClickEventPublisher;
 import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -19,9 +20,21 @@ public class ClickEventPublisherConfig {
     public ClickEventPublisher kafkaClickEventPublisher(
             KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate,
             @Value("${app.analytics.kafka.topic:shortlink.redirect.click.v1}") String topic,
-            ShortLinkMetrics shortLinkMetrics
+            ShortLinkMetrics shortLinkMetrics,
+            ObjectProvider<KafkaAvailability> kafkaAvailability,
+            ObjectProvider<com.studyjun.backend.link.clickevent.ClickEventAnalyticsService> clickEventAnalyticsService
     ) {
-        return new KafkaClickEventPublisher(kafkaTemplate, topic, shortLinkMetrics);
+        com.studyjun.backend.link.clickevent.ClickEventAnalyticsService analyticsService = clickEventAnalyticsService.getIfAvailable();
+        com.studyjun.backend.link.clickevent.ClickEventPublisher fallbackPublisher = analyticsService == null
+                ? null
+                : new com.studyjun.backend.link.clickevent.DirectClickEventPublisher(analyticsService);
+        return new KafkaClickEventPublisher(
+                kafkaTemplate,
+                topic,
+                shortLinkMetrics,
+                kafkaAvailability.getIfAvailable(),
+                fallbackPublisher
+        );
     }
 
     @Bean

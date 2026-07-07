@@ -1,5 +1,7 @@
 services:
   consumer:
+    build:
+      context: ./backend
     image: 01055861376/shortlink-backend:1.0.0
     container_name: shortlink-consumer
     restart: unless-stopped
@@ -8,6 +10,7 @@ services:
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: ${SPRING_FLYWAY_BASELINE_ON_MIGRATE:-false}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
@@ -26,6 +29,8 @@ services:
       - "8081:8081"
 
   api:
+    build:
+      context: ./backend
     image: 01055861376/shortlink-backend:1.0.0
     container_name: shortlink-api
     restart: unless-stopped
@@ -34,16 +39,18 @@ services:
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: ${SPRING_FLYWAY_BASELINE_ON_MIGRATE:-false}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
       REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TOKEN_EXPIRATION_MS: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:-3600000}
       JWT_REFRESH_TOKEN_EXPIRATION_MS: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:-1209600000}
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://qwe123.shop}
-      APP_AUTH_SECURE_COOKIE: ${APP_AUTH_SECURE_COOKIE:-true}
-      APP_AUTH_SAME_SITE: ${APP_AUTH_SAME_SITE:-None}
-      APP_AUTH_COOKIE_DOMAIN: ${APP_AUTH_COOKIE_DOMAIN:-.qwe123.shop}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      APP_AUTH_SECURE_COOKIE: ${APP_AUTH_SECURE_COOKIE:-false}
+      APP_AUTH_SAME_SITE: ${APP_AUTH_SAME_SITE:-Lax}
+      APP_AUTH_COOKIE_DOMAIN: ${APP_AUTH_COOKIE_DOMAIN:-}
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
       MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
     healthcheck:

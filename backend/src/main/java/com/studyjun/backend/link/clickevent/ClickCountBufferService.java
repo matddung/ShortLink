@@ -1,5 +1,6 @@
 package com.studyjun.backend.link.clickevent;
 
+import com.studyjun.backend.config.RedisAvailability;
 import com.studyjun.backend.link.ShortLinkMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,24 +33,48 @@ public class ClickCountBufferService {
     );
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final RedisAvailability redisAvailability;
     private final ShortLinkMetrics shortLinkMetrics;
 
     public ClickCountBufferService(@Qualifier("clickCountRedisTemplate") RedisTemplate<String, String> redisTemplate,
+                                   RedisAvailability redisAvailability,
                                    ShortLinkMetrics shortLinkMetrics) {
         this.redisTemplate = redisTemplate;
+        this.redisAvailability = redisAvailability;
         this.shortLinkMetrics = shortLinkMetrics;
     }
 
     public long increment(Long shortLinkId) {
-        Long updatedValue = redisTemplate.opsForValue().increment(buildKey(shortLinkId));
-        if (updatedValue == null) {
-            throw new IllegalStateException("Redis INCR returned null for shortLinkId=" + shortLinkId);
+        if (!redisAvailability.isAvailable()) {
+            throw new IllegalStateException("Redis is unavailable for click-count buffering");
         }
-        return updatedValue;
+
+        try {
+            Long updatedValue = redisTemplate.opsForValue().increment(buildKey(shortLinkId));
+            if (updatedValue == null) {
+                throw new IllegalStateException("Redis INCR returned null for shortLinkId=" + shortLinkId);
+            }
+            return updatedValue;
+        } catch (RuntimeException ex) {
+            redisAvailability.markUnavailable(ex);
+            throw ex;
+        }
     }
 
     public Set<String> findBufferedKeys() {
-        Set<String> keys = redisTemplate.keys(CLICK_COUNT_KEY_PREFIX + "*");
+        if (!redisAvailability.isAvailable()) {
+            shortLinkMetrics.setRedisCounterKeyCount(0);
+            return Collections.emptySet();
+        }
+
+        Set<String> keys;
+        try {
+            keys = redisTemplate.keys(CLICK_COUNT_KEY_PREFIX + "*");
+        } catch (RuntimeException ex) {
+            redisAvailability.markUnavailable(ex);
+            shortLinkMetrics.setRedisCounterKeyCount(0);
+            return Collections.emptySet();
+        }
         if (keys == null || keys.isEmpty()) {
             shortLinkMetrics.setRedisCounterKeyCount(0);
             return Collections.emptySet();
@@ -62,12 +87,22 @@ public class ClickCountBufferService {
     }
 
     public Long consumeBufferedCount(String key) {
-        String rawValue = redisTemplate.execute((RedisCallback<String>) connection -> {
-            RedisStringCommands stringCommands = connection.stringCommands();
-            byte[] serializedKey = serialize(key);
-            byte[] raw = stringCommands.getDel(serializedKey);
-            return deserialize(raw);
-        });
+        if (!redisAvailability.isAvailable()) {
+            return null;
+        }
+
+        String rawValue;
+        try {
+            rawValue = redisTemplate.execute((RedisCallback<String>) connection -> {
+                RedisStringCommands stringCommands = connection.stringCommands();
+                byte[] serializedKey = serialize(key);
+                byte[] raw = stringCommands.getDel(serializedKey);
+                return deserialize(raw);
+            });
+        } catch (RuntimeException ex) {
+            redisAvailability.markUnavailable(ex);
+            return null;
+        }
         if (rawValue == null || rawValue.isBlank()) {
             return null;
         }
@@ -75,16 +110,41 @@ public class ClickCountBufferService {
     }
 
     public boolean tryAcquireFlushLock(String ownerToken, Duration ttl) {
-        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(FLUSH_LOCK_KEY, ownerToken, ttl);
-        return Boolean.TRUE.equals(acquired);
+        if (!redisAvailability.isAvailable()) {
+            return false;
+        }
+
+        try {
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(FLUSH_LOCK_KEY, ownerToken, ttl);
+            return Boolean.TRUE.equals(acquired);
+        } catch (RuntimeException ex) {
+            redisAvailability.markUnavailable(ex);
+            return false;
+        }
     }
 
     public void restoreBufferedCount(String key, long delta) {
-        redisTemplate.opsForValue().increment(key, delta);
+        if (!redisAvailability.isAvailable()) {
+            return;
+        }
+
+        try {
+            redisTemplate.opsForValue().increment(key, delta);
+        } catch (RuntimeException ex) {
+            redisAvailability.markUnavailable(ex);
+        }
     }
 
     public void releaseFlushLock(String ownerToken) {
-        redisTemplate.execute(RELEASE_FLUSH_LOCK_SCRIPT, List.of(FLUSH_LOCK_KEY), ownerToken);
+        if (!redisAvailability.isAvailable()) {
+            return;
+        }
+
+        try {
+            redisTemplate.execute(RELEASE_FLUSH_LOCK_SCRIPT, List.of(FLUSH_LOCK_KEY), ownerToken);
+        } catch (RuntimeException ex) {
+            redisAvailability.markUnavailable(ex);
+        }
     }
 
     public Long extractShortLinkId(String key) {
