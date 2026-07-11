@@ -63,3 +63,9 @@ management:
     tags:
       application: ${spring.application.name}
       role: ${app.role}
+
+logging:
+  level:
+    org.apache.kafka.clients.NetworkClient: ERROR
+    org.springframework.kafka: WARN
+    io.lettuce.core: ERROR

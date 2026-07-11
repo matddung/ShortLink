@@ -1,13 +1,17 @@
 package com.studyjun.backend.link.clickevent;
 
 import com.studyjun.backend.link.ShortLinkMetrics;
+import com.studyjun.backend.config.KafkaAvailability;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.kafka.support.SendResult;
 
 import java.time.Instant;
@@ -16,9 +20,12 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(OutputCaptureExtension.class)
 class KafkaClickEventPublisherMetricsTest {
 
     private KafkaTemplate<String, RedirectClickEventMessage> kafkaTemplate;
@@ -48,7 +55,7 @@ class KafkaClickEventPublisherMetricsTest {
     }
 
     @Test
-    void incrementsFailureMetricOnPublishFailure() {
+    void incrementsFailureMetricOnPublishFailure(CapturedOutput output) {
         CompletableFuture<SendResult<String, RedirectClickEventMessage>> future = new CompletableFuture<>();
         when(kafkaTemplate.send(any(String.class), any(String.class), any(RedirectClickEventMessage.class))).thenReturn(future);
 
@@ -57,6 +64,29 @@ class KafkaClickEventPublisherMetricsTest {
 
         assertThat(meterRegistry.get("shortlink.kafka.publish.success.total").counter().count()).isZero();
         assertThat(meterRegistry.get("shortlink.kafka.publish.failure.total").counter().count()).isEqualTo(1.0);
+        assertThat(output).contains("cause=RuntimeException: boom");
+        assertThat(output).doesNotContain("\tat ");
+    }
+
+    @Test
+    void skipsKafkaSendWhenAvailabilityIsInCooldown() {
+        KafkaAvailability kafkaAvailability = mock(KafkaAvailability.class);
+        ClickEventPublisher fallbackPublisher = mock(ClickEventPublisher.class);
+        RedirectClickEventMessage message = sampleMessage();
+        when(kafkaAvailability.isAvailable()).thenReturn(false);
+
+        KafkaClickEventPublisher guardedPublisher = new KafkaClickEventPublisher(
+                kafkaTemplate,
+                "shortlink.redirect.click.v1",
+                new ShortLinkMetrics(meterRegistry),
+                kafkaAvailability,
+                fallbackPublisher
+        );
+
+        guardedPublisher.publish(message);
+
+        verify(kafkaTemplate, never()).send(any(String.class), any(String.class), any(RedirectClickEventMessage.class));
+        verify(fallbackPublisher).publish(message);
     }
 
     private RedirectClickEventMessage sampleMessage() {

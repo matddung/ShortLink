@@ -49,13 +49,14 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
                             if (kafkaAvailability != null) {
                                 kafkaAvailability.markUnavailable(ex);
                             }
-                            log.error(
-                                    "Failed to publish click event. eventId={}, shortCode={}, requestId={}",
+                            log.warn(
+                                    "Failed to publish click event; falling back to direct processing. eventId={}, shortCode={}, requestId={}, cause={}",
                                     message.eventId(),
                                     message.shortCode(),
                                     message.requestId(),
-                                    ex
+                                    summarize(ex)
                             );
+                            log.debug("Kafka publish failure details.", ex);
                             publishFallback(message);
                         } else {
                             shortLinkMetrics.incrementKafkaPublishSuccess();
@@ -74,13 +75,14 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
             if (kafkaAvailability != null) {
                 kafkaAvailability.markUnavailable(e);
             }
-            log.error(
-                    "Kafka send threw before async completion. eventId={}, shortCode={}, requestId={}",
+            log.warn(
+                    "Kafka send threw before async completion; falling back to direct processing. eventId={}, shortCode={}, requestId={}, cause={}",
                     message.eventId(),
                     message.shortCode(),
                     message.requestId(),
-                    e
+                    summarize(e)
             );
+            log.debug("Kafka send failure details.", e);
             publishFallback(message);
         }
     }
@@ -90,5 +92,17 @@ public class KafkaClickEventPublisher implements ClickEventPublisher {
             return;
         }
         fallbackPublisher.publish(message);
+    }
+
+    private String summarize(Throwable ex) {
+        Throwable root = ex;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) {
+            return root.getClass().getSimpleName();
+        }
+        return root.getClass().getSimpleName() + ": " + message;
     }
 }
