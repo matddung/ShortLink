@@ -1,8 +1,8 @@
 package com.studyjun.backend.link.application.redirect;
 
 import com.studyjun.backend.link.ResolvedRedirectTarget;
-import com.studyjun.backend.link.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
+import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;

@@ -2,7 +2,7 @@ package com.studyjun.backend.link.api;
 
 import com.studyjun.backend.common.ApiResponse;
 import com.studyjun.backend.link.LinkRequest;
-import com.studyjun.backend.link.LinkResponse;
+import com.studyjun.backend.link.application.ShortLinkResult;
 import com.studyjun.backend.link.application.command.LinkCommandService;
 import com.studyjun.backend.link.support.AnonymousOwnerCookieManager;
 import com.studyjun.backend.user.User;
@@ -21,13 +21,16 @@ public class LinkCommandController {
     private final LinkCommandService linkCommandService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
     private final AnonymousOwnerCookieManager anonymousOwnerCookieManager;
+    private final LinkResponseMapper linkResponseMapper;
 
     public LinkCommandController(LinkCommandService linkCommandService,
                                  AuthenticatedUserResolver authenticatedUserResolver,
-                                 AnonymousOwnerCookieManager anonymousOwnerCookieManager) {
+                                 AnonymousOwnerCookieManager anonymousOwnerCookieManager,
+                                 LinkResponseMapper linkResponseMapper) {
         this.linkCommandService = linkCommandService;
         this.authenticatedUserResolver = authenticatedUserResolver;
         this.anonymousOwnerCookieManager = anonymousOwnerCookieManager;
+        this.linkResponseMapper = linkResponseMapper;
     }
 
     @PostMapping("/anonymous")
@@ -36,11 +39,11 @@ public class LinkCommandController {
             @CookieValue(name = ANONYMOUS_OWNER_COOKIE, required = false) String ownerKey
     ) {
         String effectiveOwnerKey = anonymousOwnerCookieManager.normalizeOwnerKey(ownerKey);
-        LinkResponse.ShortLinkResponse response = linkCommandService.createAnonymous(request.originalUrl(), effectiveOwnerKey);
+        ShortLinkResult result = linkCommandService.createAnonymous(request.originalUrl(), effectiveOwnerKey);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, anonymousOwnerCookieManager.createOwnerCookie(effectiveOwnerKey))
-                .body(ApiResponse.ok(response));
+                .body(ApiResponse.ok(linkResponseMapper.toResponse(result)));
     }
 
     @PostMapping
@@ -49,6 +52,7 @@ public class LinkCommandController {
             Authentication authentication
     ) {
         User user = authenticatedUserResolver.resolve(authentication);
-        return ApiResponse.ok(linkCommandService.createForUser(request.originalUrl(), request.customCode(), user.getId()));
+        ShortLinkResult result = linkCommandService.createForUser(request.originalUrl(), request.customCode(), user.getId());
+        return ApiResponse.ok(linkResponseMapper.toResponse(result));
     }
 }

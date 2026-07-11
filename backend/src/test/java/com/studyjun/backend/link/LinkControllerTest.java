@@ -2,9 +2,11 @@ package com.studyjun.backend.link;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
+import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.analytics.persistence.LinkClickEvent;
+import com.studyjun.backend.analytics.persistence.LinkClickEventRepository;
 import com.studyjun.backend.auth.AuthRequest;
-import com.studyjun.backend.link.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -203,7 +205,15 @@ class LinkControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"originalUrl\":\"https://dashboard.example.com/path\",\"customCode\":\"dash-link-01\"}"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").isString())
+                .andExpect(jsonPath("$.data.originalUrl").value("https://dashboard.example.com/path"))
+                .andExpect(jsonPath("$.data.shortCode").value("dash-link-01"))
                 .andExpect(jsonPath("$.data.shortUrl").value(containsString("/s/dash-link-01")))
+                .andExpect(jsonPath("$.data.createdAt").isString())
+                .andExpect(jsonPath("$.data.status").value("active"))
+                .andExpect(jsonPath("$.data.totalClicks").value(0))
+                .andExpect(jsonPath("$.data.userId").isString())
                 .andReturn();
 
         String shortCode = objectMapper.readTree(createResult.getResponse().getContentAsString())
@@ -262,8 +272,14 @@ class LinkControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.totalClicks").value(2))
                 .andExpect(jsonPath("$.data.uniqueClicks").value(2))
+                .andExpect(jsonPath("$.data.lastClickedAt").isString())
                 .andExpect(jsonPath("$.data.topCountries[0].country").exists())
+                .andExpect(jsonPath("$.data.topCountries[0].count").isNumber())
                 .andExpect(jsonPath("$.data.referrers[0].source").exists())
+                .andExpect(jsonPath("$.data.referrers[0].count").isNumber())
+                .andExpect(jsonPath("$.data.referrers[0].percentage").isNumber())
+                .andExpect(jsonPath("$.data.dailyClicks[0].date").isString())
+                .andExpect(jsonPath("$.data.dailyClicks[0].clicks").isNumber())
                 .andExpect(jsonPath("$.data.dailyClicks.length()").value(14));
     }
 

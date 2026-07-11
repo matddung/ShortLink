@@ -1,6 +1,12 @@
 package com.studyjun.backend.link.application.command;
 
-import com.studyjun.backend.link.*;
+import com.studyjun.backend.link.AnonymousLinkExpiryPolicy;
+import com.studyjun.backend.link.ShortCodeService;
+import com.studyjun.backend.link.ShortLink;
+import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.link.UrlValidationService;
+import com.studyjun.backend.link.application.ShortLinkResult;
+import com.studyjun.backend.link.application.redirect.RedirectCacheInvalidator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,40 +22,37 @@ public class LinkCommandService {
     private final AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy;
     private final UrlValidationService urlValidationService;
     private final ShortCodeService shortCodeService;
-    private final RedirectService redirectService;
-    private final String appBaseUrl;
+    private final RedirectCacheInvalidator redirectCacheInvalidator;
     private final long anonymousExpirationDays;
 
     public LinkCommandService(ShortLinkRepository shortLinkRepository,
                               AnonymousLinkExpiryPolicy anonymousLinkExpiryPolicy,
                               UrlValidationService urlValidationService,
                               ShortCodeService shortCodeService,
-                              RedirectService redirectService,
-                              @Value("${app.base-url:https://qwe123.shop}") String appBaseUrl,
+                              RedirectCacheInvalidator redirectCacheInvalidator,
                               @Value("${app.anonymous.expiration-days:30}") long anonymousExpirationDays) {
         this.shortLinkRepository = shortLinkRepository;
         this.anonymousLinkExpiryPolicy = anonymousLinkExpiryPolicy;
         this.urlValidationService = urlValidationService;
         this.shortCodeService = shortCodeService;
-        this.redirectService = redirectService;
-        this.appBaseUrl = appBaseUrl;
+        this.redirectCacheInvalidator = redirectCacheInvalidator;
         this.anonymousExpirationDays = anonymousExpirationDays;
     }
 
     @Transactional
-    public LinkResponse.ShortLinkResponse createAnonymous(String originalUrl, String ownerKey) {
+    public ShortLinkResult createAnonymous(String originalUrl, String ownerKey) {
         urlValidationService.validate(originalUrl);
 
         String shortCode = shortCodeService.generateUniqueShortCode();
         Instant anonymousExpiresAt = Instant.now().plus(anonymousExpirationDays, ChronoUnit.DAYS);
         ShortLink saved = shortLinkRepository.save(new ShortLink(originalUrl, shortCode, ownerKey, anonymousExpiresAt));
-        redirectService.invalidateRedirectLookupCache(saved.getShortCode());
+        redirectCacheInvalidator.invalidate(saved.getShortCode());
 
-        return toResponse(saved);
+        return toResult(saved);
     }
 
     @Transactional
-    public LinkResponse.ShortLinkResponse createForUser(String originalUrl, String customCode, Long userId) {
+    public ShortLinkResult createForUser(String originalUrl, String customCode, Long userId) {
         urlValidationService.validate(originalUrl);
 
         String shortCode = shortCodeService.resolveShortCode(customCode);
@@ -57,8 +60,8 @@ public class LinkCommandService {
         shortLink.claimToUser(userId);
 
         ShortLink saved = shortLinkRepository.save(shortLink);
-        redirectService.invalidateRedirectLookupCache(saved.getShortCode());
-        return toResponse(saved);
+        redirectCacheInvalidator.invalidate(saved.getShortCode());
+        return toResult(saved);
     }
 
     @Transactional
@@ -79,12 +82,12 @@ public class LinkCommandService {
 
         if (!expiredLinks.isEmpty()) {
             shortLinkRepository.deleteAll(expiredLinks);
-            expiredLinks.forEach(link -> redirectService.invalidateRedirectLookupCache(link.getShortCode()));
+            redirectCacheInvalidator.invalidateAll(expiredLinks);
         }
 
         validLinks.forEach(link -> {
             link.claimToUser(userId);
-            redirectService.invalidateRedirectLookupCache(link.getShortCode());
+            redirectCacheInvalidator.invalidate(link.getShortCode());
         });
         return validLinks.size();
     }
@@ -93,7 +96,7 @@ public class LinkCommandService {
     public long purgeExpiredAnonymousLinks() {
         Instant threshold = Instant.now();
         List<ShortLink> expiredLinks = shortLinkRepository.findAllByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
-        expiredLinks.forEach(link -> redirectService.invalidateRedirectLookupCache(link.getShortCode()));
+        redirectCacheInvalidator.invalidateAll(expiredLinks);
         return shortLinkRepository.deleteByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
     }
 
@@ -101,20 +104,15 @@ public class LinkCommandService {
         return anonymousLinkExpiryPolicy.isExpired(shortLink);
     }
 
-    private LinkResponse.ShortLinkResponse toResponse(ShortLink shortLink) {
-        return new LinkResponse.ShortLinkResponse(
-                String.valueOf(shortLink.getId()),
+    private ShortLinkResult toResult(ShortLink shortLink) {
+        return new ShortLinkResult(
+                shortLink.getId(),
                 shortLink.getOriginalUrl(),
                 shortLink.getShortCode(),
-                buildShortUrl(shortLink.getShortCode()),
                 shortLink.getCreatedAt(),
-                shortLink.isActive() ? "active" : "inactive",
+                shortLink.isActive(),
                 shortLink.getTotalClicks(),
-                shortLink.getOwnerUserId() == null ? "anonymous" : String.valueOf(shortLink.getOwnerUserId())
+                shortLink.getOwnerUserId()
         );
-    }
-
-    private String buildShortUrl(String shortCode) {
-        return appBaseUrl + "/api/s/" + shortCode;
     }
 }

@@ -1,9 +1,17 @@
 package com.studyjun.backend.link;
 
 import com.studyjun.backend.common.BusinessException;
+import com.studyjun.backend.link.application.redirect.CachedRedirectTarget;
 import com.studyjun.backend.link.application.redirect.LinkRedirectService;
-import com.studyjun.backend.link.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.link.application.redirect.NegativeRedirectCache;
+import com.studyjun.backend.link.application.redirect.RedirectCacheInvalidator;
+import com.studyjun.backend.link.application.redirect.RedirectClickEventRecorder;
+import com.studyjun.backend.link.application.redirect.RedirectLookupService;
+import com.studyjun.backend.link.application.redirect.RedirectTargetCache;
+import com.studyjun.backend.link.application.redirect.RedirectTargetRepository;
+import com.studyjun.backend.link.application.redirect.RedirectTargetSnapshot;
+import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
+import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,9 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,16 +36,16 @@ import static org.mockito.Mockito.*;
 class LinkRedirectServiceCacheTest {
 
     @Mock
-    private ShortLinkRepository shortLinkRepository;
+    private RedirectTargetRepository redirectTargetRepository;
 
     @Mock
     private ClickEventPublisher clickEventPublisher;
 
     @Mock
-    private RedirectLookupCacheRepository redirectLookupCacheRepository;
+    private RedirectTargetCache redirectTargetCache;
 
     @Mock
-    private NegativeRedirectLookupCacheRepository negativeRedirectLookupCacheRepository;
+    private NegativeRedirectCache negativeRedirectCache;
 
     private RedirectLookupPolicy redirectLookupPolicy;
     private SimpleMeterRegistry meterRegistry;
@@ -48,25 +56,29 @@ class LinkRedirectServiceCacheTest {
         meterRegistry = new SimpleMeterRegistry();
         redirectLookupPolicy = new RedirectLookupPolicy();
 
-        RedirectService redirectService = new RedirectService(
-                shortLinkRepository,
-                clickEventPublisher,
-                redirectLookupCacheRepository,
-                negativeRedirectLookupCacheRepository,
+        RedirectLookupService redirectLookupService = new RedirectLookupService(
+                redirectTargetRepository,
+                redirectTargetCache,
+                negativeRedirectCache,
                 redirectLookupPolicy,
-                new ShortLinkMetrics(meterRegistry)
+                new ShortLinkMetrics(meterRegistry),
+                new RedirectCacheInvalidator(redirectTargetCache, negativeRedirectCache)
+        );
+
+        RedirectService redirectService = new RedirectService(
+                redirectLookupService,
+                new RedirectClickEventRecorder(clickEventPublisher, Clock.systemUTC())
         );
         linkRedirectService = new LinkRedirectService(redirectService);
     }
 
     @Test
     void resolveOriginalUrl_publishesClickEventAfterResolvingTarget() {
-        ShortLink shortLink = new ShortLink("https://example.com/redirect", "redir01", null, null);
-        ReflectionTestUtils.setField(shortLink, "id", 101L);
+        RedirectTargetSnapshot target = new RedirectTargetSnapshot(101L, "https://example.com/redirect", null, true);
 
-        when(negativeRedirectLookupCacheRepository.findByShortCode("redir01")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("redir01")).thenReturn(Optional.empty());
-        when(shortLinkRepository.findByShortCode("redir01")).thenReturn(Optional.of(shortLink));
+        when(negativeRedirectCache.findByShortCode("redir01")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("redir01")).thenReturn(Optional.empty());
+        when(redirectTargetRepository.findByShortCode("redir01")).thenReturn(Optional.of(target));
 
         String originalUrl = linkRedirectService.resolveOriginalUrl(
                 "redir01",
@@ -97,9 +109,9 @@ class LinkRedirectServiceCacheTest {
 
     @Test
     void resolveOriginalUrlSelectOnly_usesCacheFirstWithoutDbFallback() {
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache01")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("cache01"))
-                .thenReturn(Optional.of(new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
+        when(negativeRedirectCache.findByShortCode("cache01")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("cache01"))
+                .thenReturn(Optional.of(new CachedRedirectTarget(
                         101L,
                         "https://example.com/cached",
                         null,
@@ -109,7 +121,7 @@ class LinkRedirectServiceCacheTest {
         String originalUrl = linkRedirectService.resolveOriginalUrlSelectOnly("cache01");
 
         assertThat(originalUrl).isEqualTo("https://example.com/cached");
-        verifyNoInteractions(shortLinkRepository);
+        verifyNoInteractions(redirectTargetRepository);
         assertThat(meterRegistry.get("shortlink.redis.lookup.cache.hit.total").counter().count()).isEqualTo(1.0);
         assertThat(meterRegistry.get("shortlink.redis.lookup.cache.miss.total").counter().count()).isZero();
         assertThat(meterRegistry.get("shortlink.api.redirect.db_fallback.total").counter().count()).isZero();
@@ -118,44 +130,42 @@ class LinkRedirectServiceCacheTest {
 
     @Test
     void resolveOriginalUrlSelectOnly_invalidatesExpiredPositiveCacheAndFallsBackToDb() {
-        ShortLink shortLink = new ShortLink("https://example.com/fresh", "cache-expired", null, null);
-        ReflectionTestUtils.setField(shortLink, "id", 707L);
+        RedirectTargetSnapshot target = new RedirectTargetSnapshot(707L, "https://example.com/fresh", null, true);
 
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache-expired")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("cache-expired"))
-                .thenReturn(Optional.of(new RedirectLookupCacheRepository.RedirectLookupCacheEntry(
+        when(negativeRedirectCache.findByShortCode("cache-expired")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("cache-expired"))
+                .thenReturn(Optional.of(new CachedRedirectTarget(
                         606L,
                         "https://example.com/stale",
                         Instant.now().minusSeconds(60),
                         true
                 )));
-        when(shortLinkRepository.findByShortCode("cache-expired")).thenReturn(Optional.of(shortLink));
+        when(redirectTargetRepository.findByShortCode("cache-expired")).thenReturn(Optional.of(target));
 
         String originalUrl = linkRedirectService.resolveOriginalUrlSelectOnly("cache-expired");
 
         assertThat(originalUrl).isEqualTo("https://example.com/fresh");
-        verify(redirectLookupCacheRepository).delete("cache-expired");
-        verify(negativeRedirectLookupCacheRepository, atLeastOnce()).delete("cache-expired");
-        verify(shortLinkRepository).findByShortCode("cache-expired");
-        verify(redirectLookupCacheRepository).save(eq("cache-expired"), any(RedirectLookupCacheRepository.RedirectLookupCacheEntry.class));
+        verify(redirectTargetCache).delete("cache-expired");
+        verify(negativeRedirectCache, atLeastOnce()).delete("cache-expired");
+        verify(redirectTargetRepository).findByShortCode("cache-expired");
+        verify(redirectTargetCache).save(eq("cache-expired"), any(CachedRedirectTarget.class));
         assertThat(meterRegistry.get("shortlink.redis.lookup.cache.miss.total").counter().count()).isEqualTo(1.0);
         assertThat(meterRegistry.get("shortlink.api.redirect.db_fallback.total").counter().count()).isEqualTo(1.0);
     }
 
     @Test
     void resolveOriginalUrlSelectOnly_fallsBackToDbOnCacheMissAndWritesCache() {
-        ShortLink shortLink = new ShortLink("https://example.com/db", "cache02", null, null);
-        ReflectionTestUtils.setField(shortLink, "id", 202L);
+        RedirectTargetSnapshot target = new RedirectTargetSnapshot(202L, "https://example.com/db", null, true);
 
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache02")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("cache02")).thenReturn(Optional.empty());
-        when(shortLinkRepository.findByShortCode("cache02")).thenReturn(Optional.of(shortLink));
+        when(negativeRedirectCache.findByShortCode("cache02")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("cache02")).thenReturn(Optional.empty());
+        when(redirectTargetRepository.findByShortCode("cache02")).thenReturn(Optional.of(target));
 
         String originalUrl = linkRedirectService.resolveOriginalUrlSelectOnly("cache02");
 
         assertThat(originalUrl).isEqualTo("https://example.com/db");
-        verify(shortLinkRepository).findByShortCode("cache02");
-        verify(redirectLookupCacheRepository).save(eq("cache02"), any(RedirectLookupCacheRepository.RedirectLookupCacheEntry.class));
+        verify(redirectTargetRepository).findByShortCode("cache02");
+        verify(redirectTargetCache).save(eq("cache02"), any(CachedRedirectTarget.class));
         assertThat(meterRegistry.get("shortlink.redis.lookup.cache.hit.total").counter().count()).isZero();
         assertThat(meterRegistry.get("shortlink.redis.lookup.cache.miss.total").counter().count()).isEqualTo(1.0);
         assertThat(meterRegistry.get("shortlink.api.redirect.db_fallback.total").counter().count()).isEqualTo(1.0);
@@ -164,73 +174,70 @@ class LinkRedirectServiceCacheTest {
 
     @Test
     void resolveOriginalUrlSelectOnly_deletesExpiredLinkAndThrowsNotFound() {
-        ShortLink expired = new ShortLink(
+        RedirectTargetSnapshot expired = new RedirectTargetSnapshot(
+                303L,
                 "https://example.com/expired",
-                "cache03",
-                "owner",
-                Instant.now().minusSeconds(60)
+                Instant.now().minusSeconds(60),
+                true
         );
-        ReflectionTestUtils.setField(expired, "id", 303L);
 
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache03")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("cache03")).thenReturn(Optional.empty());
-        when(shortLinkRepository.findByShortCode("cache03")).thenReturn(Optional.of(expired));
+        when(negativeRedirectCache.findByShortCode("cache03")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("cache03")).thenReturn(Optional.empty());
+        when(redirectTargetRepository.findByShortCode("cache03")).thenReturn(Optional.of(expired));
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache03"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
-        verify(shortLinkRepository).delete(expired);
-        verify(redirectLookupCacheRepository).delete("cache03");
-        verify(negativeRedirectLookupCacheRepository).delete("cache03");
-        verify(negativeRedirectLookupCacheRepository).save("cache03", NegativeRedirectReason.EXPIRED);
-        verify(redirectLookupCacheRepository, never()).save(eq("cache03"), any());
+        verify(redirectTargetRepository).delete(expired);
+        verify(redirectTargetCache).delete("cache03");
+        verify(negativeRedirectCache).delete("cache03");
+        verify(negativeRedirectCache).save("cache03", NegativeRedirectReason.EXPIRED);
+        verify(redirectTargetCache, never()).save(eq("cache03"), any());
     }
 
     @Test
     void resolveOriginalUrlSelectOnly_throwsImmediatelyOnNegativeCacheHit() {
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache04"))
+        when(negativeRedirectCache.findByShortCode("cache04"))
                 .thenReturn(Optional.of(NegativeRedirectReason.NOT_FOUND));
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache04"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
-        verifyNoInteractions(shortLinkRepository);
-        verifyNoInteractions(redirectLookupCacheRepository);
+        verifyNoInteractions(redirectTargetRepository);
+        verifyNoInteractions(redirectTargetCache);
         assertThat(meterRegistry.get("shortlink.redis.lookup.negative_cache.hit.total").counter().count()).isEqualTo(1.0);
     }
 
     @Test
     void resolveOriginalUrlSelectOnly_savesNegativeCacheWhenDbMisses() {
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
-        when(shortLinkRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
+        when(negativeRedirectCache.findByShortCode("cache05")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("cache05")).thenReturn(Optional.empty());
+        when(redirectTargetRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache05"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
-        verify(negativeRedirectLookupCacheRepository).save("cache05", NegativeRedirectReason.NOT_FOUND);
-        verify(redirectLookupCacheRepository, never()).save(eq("cache05"), any());
+        verify(negativeRedirectCache).save("cache05", NegativeRedirectReason.NOT_FOUND);
+        verify(redirectTargetCache, never()).save(eq("cache05"), any());
     }
 
 
     @Test
     void resolveOriginalUrlSelectOnly_savesInactiveNegativeCacheWhenLinkIsInactive() {
-        ShortLink inactive = new ShortLink("https://example.com/inactive", "cache06", null, null);
-        ReflectionTestUtils.setField(inactive, "id", 606L);
-        inactive.deactivate();
+        RedirectTargetSnapshot inactive = new RedirectTargetSnapshot(606L, "https://example.com/inactive", null, false);
 
-        when(negativeRedirectLookupCacheRepository.findByShortCode("cache06")).thenReturn(Optional.empty());
-        when(redirectLookupCacheRepository.findByShortCode("cache06")).thenReturn(Optional.empty());
-        when(shortLinkRepository.findByShortCode("cache06")).thenReturn(Optional.of(inactive));
+        when(negativeRedirectCache.findByShortCode("cache06")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("cache06")).thenReturn(Optional.empty());
+        when(redirectTargetRepository.findByShortCode("cache06")).thenReturn(Optional.of(inactive));
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache06"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("링크를 찾을 수 없습니다.");
 
-        verify(negativeRedirectLookupCacheRepository).save("cache06", NegativeRedirectReason.INACTIVE);
-        verify(shortLinkRepository, never()).delete(any());
+        verify(negativeRedirectCache).save("cache06", NegativeRedirectReason.INACTIVE);
+        verify(redirectTargetRepository, never()).delete(any());
     }
 }

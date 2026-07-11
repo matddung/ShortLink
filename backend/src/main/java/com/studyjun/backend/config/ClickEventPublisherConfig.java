@@ -1,10 +1,11 @@
 package com.studyjun.backend.config;
 
 import com.studyjun.backend.link.ShortLinkMetrics;
-import com.studyjun.backend.link.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.clickevent.KafkaClickEventPublisher;
-import com.studyjun.backend.link.clickevent.NoopClickEventPublisher;
-import com.studyjun.backend.link.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
+import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.link.infrastructure.event.DirectClickEventPublisher;
+import com.studyjun.backend.link.infrastructure.event.KafkaClickEventPublisher;
+import com.studyjun.backend.link.infrastructure.event.NoopClickEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.ObjectProvider;
@@ -22,12 +23,12 @@ public class ClickEventPublisherConfig {
             @Value("${app.analytics.kafka.topic:shortlink.redirect.click.v1}") String topic,
             ShortLinkMetrics shortLinkMetrics,
             ObjectProvider<KafkaAvailability> kafkaAvailability,
-            ObjectProvider<com.studyjun.backend.link.clickevent.ClickEventAnalyticsService> clickEventAnalyticsService
+            ObjectProvider<com.studyjun.backend.analytics.clickevent.ClickEventAnalyticsService> clickEventAnalyticsService
     ) {
-        com.studyjun.backend.link.clickevent.ClickEventAnalyticsService analyticsService = clickEventAnalyticsService.getIfAvailable();
-        com.studyjun.backend.link.clickevent.ClickEventPublisher fallbackPublisher = analyticsService == null
+        com.studyjun.backend.analytics.clickevent.ClickEventAnalyticsService analyticsService = clickEventAnalyticsService.getIfAvailable();
+        ClickEventPublisher fallbackPublisher = analyticsService == null
                 ? null
-                : new com.studyjun.backend.link.clickevent.DirectClickEventPublisher(analyticsService);
+                : new DirectClickEventPublisher(analyticsService);
         return new KafkaClickEventPublisher(
                 kafkaTemplate,
                 topic,

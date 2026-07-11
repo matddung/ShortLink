@@ -1,9 +1,9 @@
 package com.studyjun.backend.config;
 
 import com.studyjun.backend.link.ShortLinkMetrics;
-import com.studyjun.backend.link.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.clickevent.KafkaClickEventPublisher;
-import com.studyjun.backend.link.clickevent.NoopClickEventPublisher;
+import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
+import com.studyjun.backend.link.infrastructure.event.KafkaClickEventPublisher;
+import com.studyjun.backend.link.infrastructure.event.NoopClickEventPublisher;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;

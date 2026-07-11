@@ -1,5 +1,6 @@
 package com.studyjun.backend.link;
 
+import com.studyjun.backend.link.application.redirect.RedirectMetrics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -10,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
-public class ShortLinkMetrics {
+public class ShortLinkMetrics implements RedirectMetrics {
 
     private final Counter redirectLookupCacheHitCounter;
     private final Counter redirectLookupCacheMissCounter;
@@ -58,10 +59,15 @@ public class ShortLinkMetrics {
         this.flushDeltaTotalCounter = meterRegistry.counter("shortlink.flush.delta.total");
     }
 
+    @Override
     public void incrementRedirectCacheHit() { redirectLookupCacheHitCounter.increment(); }
+    @Override
     public void incrementRedirectCacheMiss() { redirectLookupCacheMissCounter.increment(); }
+    @Override
     public void incrementNegativeCacheHit() { redirectLookupNegativeCacheHitCounter.increment(); }
+    @Override
     public void incrementNegativeCacheMiss() { redirectLookupNegativeCacheMissCounter.increment(); }
+    @Override
     public void incrementRedirectDbFallback() { redirectLookupDbFallbackCounter.increment(); }
     public Timer redirectLatencyTimer() { return redirectLatencyTimer; }
 

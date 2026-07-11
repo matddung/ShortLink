@@ -1,7 +1,6 @@
 package com.studyjun.backend.link.api;
 
 import com.studyjun.backend.common.ApiResponse;
-import com.studyjun.backend.link.LinkResponse;
 import com.studyjun.backend.link.application.query.LinkQueryService;
 import com.studyjun.backend.user.User;
 import org.springframework.security.core.Authentication;
@@ -17,11 +16,14 @@ public class LinkQueryController {
 
     private final LinkQueryService linkQueryService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final LinkResponseMapper linkResponseMapper;
 
     public LinkQueryController(LinkQueryService linkQueryService,
-                               AuthenticatedUserResolver authenticatedUserResolver) {
+                               AuthenticatedUserResolver authenticatedUserResolver,
+                               LinkResponseMapper linkResponseMapper) {
         this.linkQueryService = linkQueryService;
         this.authenticatedUserResolver = authenticatedUserResolver;
+        this.linkResponseMapper = linkResponseMapper;
     }
 
     @GetMapping("/anonymous")
@@ -31,13 +33,13 @@ public class LinkQueryController {
         if (ownerKey == null || ownerKey.isBlank()) {
             return ApiResponse.ok(List.of());
         }
-        return ApiResponse.ok(linkQueryService.getAnonymousLinks(ownerKey));
+        return ApiResponse.ok(linkResponseMapper.toShortLinkResponses(linkQueryService.getAnonymousLinks(ownerKey)));
     }
 
     @GetMapping
     public ApiResponse<List<LinkResponse.ShortLinkResponse>> getMyLinks(Authentication authentication) {
         User user = authenticatedUserResolver.resolve(authentication);
-        return ApiResponse.ok(linkQueryService.getUserLinks(user.getId()));
+        return ApiResponse.ok(linkResponseMapper.toShortLinkResponses(linkQueryService.getUserLinks(user.getId())));
     }
 
     @GetMapping("/{id}/stats")
@@ -46,6 +48,6 @@ public class LinkQueryController {
             Authentication authentication
     ) {
         User user = authenticatedUserResolver.resolve(authentication);
-        return ApiResponse.ok(linkQueryService.getLinkStats(id, user.getId()));
+        return ApiResponse.ok(linkResponseMapper.toResponse(linkQueryService.getLinkStats(id, user.getId())));
     }
 }
