@@ -19,12 +19,13 @@ public class GlobalExceptionHandler {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("잘못된 요청입니다.");
+                .orElse("Invalid request.");
         return ResponseEntity.badRequest().body(ErrorResponse.of("VALIDATION_ERROR", message));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception ex) {
-        return ResponseEntity.internalServerError().body(ErrorResponse.of("INTERNAL_SERVER_ERROR", ex.getMessage()));
+        return ResponseEntity.internalServerError()
+                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "Internal server error."));
     }
 }

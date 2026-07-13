@@ -1,7 +1,6 @@
 package com.studyjun.backend.link.api;
 
 import com.studyjun.backend.common.ApiResponse;
-import com.studyjun.backend.link.LinkRequest;
 import com.studyjun.backend.link.application.ShortLinkResult;
 import com.studyjun.backend.link.application.command.LinkCommandService;
 import com.studyjun.backend.link.support.AnonymousOwnerCookieManager;
@@ -53,6 +52,17 @@ public class LinkCommandController {
     ) {
         User user = authenticatedUserResolver.resolve(authentication);
         ShortLinkResult result = linkCommandService.createForUser(request.originalUrl(), request.customCode(), user.getId());
+        return ApiResponse.ok(linkResponseMapper.toResponse(result));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ApiResponse<LinkResponse.ShortLinkResponse> updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody LinkRequest.UpdateLinkStatusRequest request,
+            Authentication authentication
+    ) {
+        User user = authenticatedUserResolver.resolve(authentication);
+        ShortLinkResult result = linkCommandService.updateStatus(id, user.getId(), request.active());
         return ApiResponse.ok(linkResponseMapper.toResponse(result));
     }
 }

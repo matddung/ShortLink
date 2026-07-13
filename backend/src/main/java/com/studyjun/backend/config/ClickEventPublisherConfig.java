@@ -1,10 +1,11 @@
 package com.studyjun.backend.config;
 
-import com.studyjun.backend.link.ShortLinkMetrics;
-import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
-import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
+import com.studyjun.backend.infrastructure.optional.kafka.KafkaAvailability;
+import com.studyjun.backend.link.application.redirect.ClickEventPublisher;
+import com.studyjun.backend.link.application.redirect.RedirectClickEventMessage;
 import com.studyjun.backend.link.infrastructure.event.DirectClickEventPublisher;
-import com.studyjun.backend.link.infrastructure.event.KafkaClickEventPublisher;
+import com.studyjun.backend.link.infrastructure.optional.kafka.KafkaClickEventPublisher;
 import com.studyjun.backend.link.infrastructure.event.NoopClickEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

@@ -1,8 +1,7 @@
 package com.studyjun.backend.analytics.reconciliation;
 
+import com.studyjun.backend.analytics.clickevent.ClickAggregateUpdater;
 import com.studyjun.backend.analytics.persistence.LinkClickEventRepository;
-import com.studyjun.backend.link.ShortLink;
-import com.studyjun.backend.link.ShortLinkRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,12 +12,12 @@ import java.util.List;
 @Service
 public class ClickCountReconciliationService {
 
-    private final ShortLinkRepository shortLinkRepository;
+    private final ClickAggregateUpdater clickAggregateUpdater;
     private final LinkClickEventRepository linkClickEventRepository;
 
-    public ClickCountReconciliationService(ShortLinkRepository shortLinkRepository,
+    public ClickCountReconciliationService(ClickAggregateUpdater clickAggregateUpdater,
                                            LinkClickEventRepository linkClickEventRepository) {
-        this.shortLinkRepository = shortLinkRepository;
+        this.clickAggregateUpdater = clickAggregateUpdater;
         this.linkClickEventRepository = linkClickEventRepository;
     }
 
@@ -35,14 +34,11 @@ public class ClickCountReconciliationService {
 
     @Transactional
     public SingleLinkRecalculationResult recalculateOne(Long shortLinkId) {
-        ShortLink shortLink = shortLinkRepository.findById(shortLinkId)
-                .orElseThrow(() -> new IllegalArgumentException("Short link not found. id=" + shortLinkId));
-
-        long storedTotalClicks = shortLink.getTotalClicks();
+        long storedTotalClicks = clickAggregateUpdater.getTotalClicks(shortLinkId);
         long recalculatedTotalClicks = linkClickEventRepository.countByShortLinkId(shortLinkId);
 
         if (storedTotalClicks != recalculatedTotalClicks) {
-            shortLinkRepository.overwriteTotalClicks(shortLinkId, recalculatedTotalClicks);
+            clickAggregateUpdater.overwriteTotalClicks(shortLinkId, recalculatedTotalClicks);
             log.info("Recalculated total_clicks from link_click_events. shortLinkId={}, before={}, after={}",
                     shortLinkId, storedTotalClicks, recalculatedTotalClicks);
             return new SingleLinkRecalculationResult(shortLinkId, storedTotalClicks, recalculatedTotalClicks, true);
@@ -53,7 +49,7 @@ public class ClickCountReconciliationService {
 
     @Transactional
     public int recalculateAllMismatches() {
-        int updatedRows = shortLinkRepository.reconcileTotalClicksFromEvents();
+        int updatedRows = clickAggregateUpdater.reconcileTotalClicksFromEvents();
         if (updatedRows > 0) {
             log.info("Reconciled total_clicks from link_click_events for mismatched rows. updatedRows={}", updatedRows);
         } else {

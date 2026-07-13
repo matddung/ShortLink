@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   CreateLinkFormData,
   Link,
+  LinkStatus,
   LinkStats,
 } from '../types';
 import { apiRequest, delay } from './http-client';
@@ -21,12 +22,12 @@ export const linksApi = {
     });
 
     if (response.error || !response.data) {
-      return { error: response.error || '링크를 불러올 수 없습니다.' };
+      return { error: response.error || 'Could not load links.' };
     }
 
     const link = response.data.find((item) => item.id === id);
     if (!link) {
-      return { error: '링크를 찾을 수 없습니다.' };
+      return { error: 'Link not found.' };
     }
 
     return { data: link };
@@ -39,7 +40,7 @@ export const linksApi = {
     });
 
     if (response.error || !response.data) {
-      return { error: response.error || '통계 데이터를 불러올 수 없습니다.' };
+      return { error: response.error || 'Could not load analytics.' };
     }
 
     return { data: response.data };
@@ -56,22 +57,15 @@ export const linksApi = {
     });
   },
 
-  delete: async (id: string): Promise<ApiResponse<{ success: boolean }>> => {
-    await delay(150);
-    return { data: { success: true } };
-  },
-
   updateStatus: async (
     id: string,
-    status: 'active' | 'inactive'
+    status: LinkStatus
   ): Promise<ApiResponse<Link>> => {
     await delay(150);
-    const linkResponse = await linksApi.getById(id);
-    if (linkResponse.error || !linkResponse.data) {
-      return { error: linkResponse.error || '링크를 찾을 수 없습니다.' };
-    }
-
-    return { data: { ...linkResponse.data, status } };
+    return apiRequest<Link>(`/links/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
   },
 
   getAnonymous: async (): Promise<ApiResponse<Link[]>> => {

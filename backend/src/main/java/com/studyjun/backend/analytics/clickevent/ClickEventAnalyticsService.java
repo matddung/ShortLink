@@ -1,15 +1,12 @@
 package com.studyjun.backend.analytics.clickevent;
 
-import com.studyjun.backend.analytics.clickcount.ClickCountBufferService;
+import com.studyjun.backend.analytics.infrastructure.optional.redis.ClickCountBufferService;
 import com.studyjun.backend.analytics.persistence.LinkClickEvent;
 import com.studyjun.backend.analytics.persistence.LinkClickEventRepository;
-import com.studyjun.backend.link.ShortLink;
-import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.link.application.redirect.RedirectClickEventMessage;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 
@@ -17,16 +14,16 @@ import java.time.Instant;
 @Service
 public class ClickEventAnalyticsService {
 
-    private final ShortLinkRepository shortLinkRepository;
     private final LinkClickEventRepository linkClickEventRepository;
     private final ClickCountBufferService clickCountBufferService;
+    private final ClickAggregateUpdater clickAggregateUpdater;
 
-    public ClickEventAnalyticsService(ShortLinkRepository shortLinkRepository,
-                                      LinkClickEventRepository linkClickEventRepository,
-                                      ClickCountBufferService clickCountBufferService) {
-        this.shortLinkRepository = shortLinkRepository;
+    public ClickEventAnalyticsService(LinkClickEventRepository linkClickEventRepository,
+                                      ClickCountBufferService clickCountBufferService,
+                                      ClickAggregateUpdater clickAggregateUpdater) {
         this.linkClickEventRepository = linkClickEventRepository;
         this.clickCountBufferService = clickCountBufferService;
+        this.clickAggregateUpdater = clickAggregateUpdater;
     }
 
     @Transactional
@@ -37,17 +34,9 @@ public class ClickEventAnalyticsService {
             return ProcessingResult.DUPLICATE;
         }
 
-        ShortLink shortLink = shortLinkRepository.findById(message.shortLinkId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Short link not found for click event: " + message.shortLinkId()));
-
-        if (!shortLink.getShortCode().equals(message.shortCode())) {
-            throw new IllegalArgumentException("Short code mismatch for click event " + message.eventId());
-        }
-
         linkClickEventRepository.saveAndFlush(new LinkClickEvent(
                 message.eventId(),
-                shortLink,
+                message.shortLinkId(),
                 Instant.parse(message.clickedAt()),
                 message.requestId(),
                 message.source(),
@@ -57,11 +46,11 @@ public class ClickEventAnalyticsService {
         ));
 
         try {
-            long bufferedCount = clickCountBufferService.increment(shortLink.getId());
+            long bufferedCount = clickCountBufferService.increment(message.shortLinkId());
             log.info("Persisted click event and buffered aggregate click increment. eventId={}, shortCode={}, requestId={}, bufferedCount={}",
                     message.eventId(), message.shortCode(), message.requestId(), bufferedCount);
         } catch (RuntimeException ex) {
-            shortLinkRepository.incrementTotalClicks(shortLink.getId(), 1);
+            clickAggregateUpdater.incrementTotalClicks(message.shortLinkId(), 1);
             log.info("Persisted click event and directly incremented aggregate click count because Redis buffering is unavailable. eventId={}, shortCode={}, requestId={}",
                     message.eventId(), message.shortCode(), message.requestId());
         }

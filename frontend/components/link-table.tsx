@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Copy, Check, ExternalLink, MoreHorizontal, Trash2, Power, PowerOff, BarChart3 } from 'lucide-react';
+import { Copy, Check, ExternalLink, MoreHorizontal, BarChart3, Power, PowerOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -12,18 +12,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/status-badge';
-import type { Link as LinkType } from '@/lib/types';
+import type { Link as LinkType, LinkStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface LinkTableProps {
   links: LinkType[];
-  onDelete: (id: string) => void;
-  onToggleStatus: (id: string, status: 'active' | 'inactive') => void;
-  isDeleting?: string;
+  onToggleStatus: (id: string, status: LinkStatus) => void;
   isUpdating?: string;
 }
 
-export function LinkTable({ links, onDelete, onToggleStatus, isDeleting, isUpdating }: LinkTableProps) {
+export function LinkTable({ links, onToggleStatus, isUpdating }: LinkTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const copyToClipboard = async (link: LinkType) => {
@@ -69,7 +67,7 @@ export function LinkTable({ links, onDelete, onToggleStatus, isDeleting, isUpdat
             key={link.id}
             className={cn(
               'flex flex-col gap-3 px-4 py-4 sm:grid sm:grid-cols-12 sm:items-center sm:gap-4',
-              (isDeleting === link.id || isUpdating === link.id) && 'opacity-50'
+              isUpdating === link.id && 'opacity-50'
             )}
           >
             {/* Link Info */}
@@ -139,19 +137,12 @@ export function LinkTable({ links, onDelete, onToggleStatus, isDeleting, isUpdat
                       <PowerOff className="mr-2 h-4 w-4" />
                       Deactivate
                     </DropdownMenuItem>
-                  ) : link.status === 'inactive' ? (
+                  ) : (
                     <DropdownMenuItem onClick={() => onToggleStatus(link.id, 'active')}>
                       <Power className="mr-2 h-4 w-4" />
                       Activate
                     </DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuItem 
-                    onClick={() => onDelete(link.id)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

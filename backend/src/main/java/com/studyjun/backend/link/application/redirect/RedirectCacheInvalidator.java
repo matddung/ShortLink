@@ -1,6 +1,6 @@
 package com.studyjun.backend.link.application.redirect;
 
-import com.studyjun.backend.link.ShortLink;
+import com.studyjun.backend.link.domain.ShortLink;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

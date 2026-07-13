@@ -1,6 +1,10 @@
 package com.studyjun.backend.link;
 
 import com.studyjun.backend.common.BusinessException;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
+import com.studyjun.backend.link.application.redirect.RedirectService;
+import com.studyjun.backend.link.domain.NegativeRedirectReason;
+import com.studyjun.backend.link.domain.RedirectLookupPolicy;
 import com.studyjun.backend.link.application.redirect.CachedRedirectTarget;
 import com.studyjun.backend.link.application.redirect.LinkRedirectService;
 import com.studyjun.backend.link.application.redirect.NegativeRedirectCache;
@@ -10,8 +14,8 @@ import com.studyjun.backend.link.application.redirect.RedirectLookupService;
 import com.studyjun.backend.link.application.redirect.RedirectTargetCache;
 import com.studyjun.backend.link.application.redirect.RedirectTargetRepository;
 import com.studyjun.backend.link.application.redirect.RedirectTargetSnapshot;
-import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
-import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.link.application.redirect.ClickEventPublisher;
+import com.studyjun.backend.link.application.redirect.RedirectClickEventMessage;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -108,6 +112,30 @@ class LinkRedirectServiceCacheTest {
     }
 
     @Test
+    void resolveOriginalUrl_returnsRedirectUrlEvenWhenClickPublishFails() {
+        RedirectTargetSnapshot target = new RedirectTargetSnapshot(101L, "https://example.com/redirect", null, true);
+
+        when(negativeRedirectCache.findByShortCode("redir-fail")).thenReturn(Optional.empty());
+        when(redirectTargetCache.findByShortCode("redir-fail")).thenReturn(Optional.empty());
+        when(redirectTargetRepository.findByShortCode("redir-fail")).thenReturn(Optional.of(target));
+        doThrow(new RuntimeException("publisher unavailable"))
+                .when(clickEventPublisher)
+                .publish(any(RedirectClickEventMessage.class));
+
+        String originalUrl = linkRedirectService.resolveOriginalUrl(
+                "redir-fail",
+                "KR",
+                "https://search.example.com",
+                "visitor-01",
+                "request-01",
+                "test-source"
+        );
+
+        assertThat(originalUrl).isEqualTo("https://example.com/redirect");
+        verify(clickEventPublisher).publish(any(RedirectClickEventMessage.class));
+    }
+
+    @Test
     void resolveOriginalUrlSelectOnly_usesCacheFirstWithoutDbFallback() {
         when(negativeRedirectCache.findByShortCode("cache01")).thenReturn(Optional.empty());
         when(redirectTargetCache.findByShortCode("cache01"))
@@ -186,8 +214,8 @@ class LinkRedirectServiceCacheTest {
         when(redirectTargetRepository.findByShortCode("cache03")).thenReturn(Optional.of(expired));
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache03"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("링크를 찾을 수 없습니다.");
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo("LINK_NOT_FOUND"));
 
         verify(redirectTargetRepository).delete(expired);
         verify(redirectTargetCache).delete("cache03");
@@ -202,8 +230,8 @@ class LinkRedirectServiceCacheTest {
                 .thenReturn(Optional.of(NegativeRedirectReason.NOT_FOUND));
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache04"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("링크를 찾을 수 없습니다.");
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo("LINK_NOT_FOUND"));
 
         verifyNoInteractions(redirectTargetRepository);
         verifyNoInteractions(redirectTargetCache);
@@ -217,8 +245,8 @@ class LinkRedirectServiceCacheTest {
         when(redirectTargetRepository.findByShortCode("cache05")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache05"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("링크를 찾을 수 없습니다.");
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo("LINK_NOT_FOUND"));
 
         verify(negativeRedirectCache).save("cache05", NegativeRedirectReason.NOT_FOUND);
         verify(redirectTargetCache, never()).save(eq("cache05"), any());
@@ -234,8 +262,8 @@ class LinkRedirectServiceCacheTest {
         when(redirectTargetRepository.findByShortCode("cache06")).thenReturn(Optional.of(inactive));
 
         assertThatThrownBy(() -> linkRedirectService.resolveOriginalUrlSelectOnly("cache06"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("링크를 찾을 수 없습니다.");
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo("LINK_NOT_FOUND"));
 
         verify(negativeRedirectCache).save("cache06", NegativeRedirectReason.INACTIVE);
         verify(redirectTargetRepository, never()).delete(any());

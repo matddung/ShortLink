@@ -1,9 +1,9 @@
 package com.studyjun.backend.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.studyjun.backend.link.ShortLinkMetrics;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
 import com.studyjun.backend.analytics.clickevent.ClickEventAnalyticsService;
-import com.studyjun.backend.analytics.clickevent.KafkaClickEventConsumer;
+import com.studyjun.backend.analytics.infrastructure.optional.kafka.KafkaClickEventConsumer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;

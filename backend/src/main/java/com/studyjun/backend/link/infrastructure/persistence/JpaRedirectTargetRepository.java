@@ -1,6 +1,6 @@
 package com.studyjun.backend.link.infrastructure.persistence;
 
-import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.link.infrastructure.persistence.ShortLinkRepository;
 import com.studyjun.backend.link.application.redirect.RedirectTargetRepository;
 import com.studyjun.backend.link.application.redirect.RedirectTargetSnapshot;
 import org.springframework.stereotype.Component;

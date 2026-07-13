@@ -1,6 +1,6 @@
 package com.studyjun.backend.link.application.redirect;
 
-import com.studyjun.backend.link.ShortLink;
+import com.studyjun.backend.link.domain.ShortLink;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

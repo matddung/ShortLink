@@ -1,4 +1,4 @@
-package com.studyjun.backend.analytics.clickevent;
+package com.studyjun.backend.analytics.infrastructure.optional.kafka;
 
 import java.time.Clock;
 import java.time.Duration;

@@ -1,6 +1,6 @@
 package com.studyjun.backend.link.application.redirect;
 
-import com.studyjun.backend.link.NegativeRedirectReason;
+import com.studyjun.backend.link.domain.NegativeRedirectReason;
 
 import java.util.Optional;
 

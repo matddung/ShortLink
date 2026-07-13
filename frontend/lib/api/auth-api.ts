@@ -58,7 +58,7 @@ export const authApi = {
     });
 
     if (refreshResponse.error || !refreshResponse.data) {
-      return { error: refreshResponse.error || '토큰 갱신에 실패했습니다.' };
+      return { error: refreshResponse.error || 'Could not refresh token.' };
     }
 
     tokenStorage.set(refreshResponse.data.accessToken);
@@ -72,7 +72,7 @@ export const authApi = {
     });
 
     if (signupResponse.error || !signupResponse.data) {
-      return { error: signupResponse.error || '회원가입에 실패했습니다.' };
+      return { error: signupResponse.error || 'Could not sign up.' };
     }
 
     const loginResponse = await apiRequest<BackendTokenResponse>('/auth/login', {
@@ -81,7 +81,7 @@ export const authApi = {
     });
 
     if (loginResponse.error || !loginResponse.data) {
-      return { error: loginResponse.error || '회원가입 후 로그인에 실패했습니다.' };
+      return { error: loginResponse.error || 'Signed up, but could not log in.' };
     }
 
     const user = toUser(signupResponse.data);
@@ -102,7 +102,7 @@ export const authApi = {
     });
 
     if (loginResponse.error || !loginResponse.data) {
-      return { error: loginResponse.error || '로그인에 실패했습니다.' };
+      return { error: loginResponse.error || 'Could not log in.' };
     }
 
     const cachedUser = userStorage.get();
@@ -126,13 +126,13 @@ export const authApi = {
   me: async (): Promise<ApiResponse<User>> => {
     const token = tokenStorage.get();
     if (!token) {
-      return { error: '인증이 필요합니다.' };
+      return { error: 'Authentication is required.' };
     }
 
     if (!tokenStorage.get()) {
       const refreshResult = await authApi.refresh();
       if (refreshResult.error) {
-        return { error: '인증이 필요합니다.' };
+        return { error: 'Authentication is required.' };
       }
     }
 
@@ -141,7 +141,7 @@ export const authApi = {
     });
 
     if (meResponse.error || !meResponse.data) {
-      return { error: meResponse.error || '사용자 정보를 불러올 수 없습니다. 다시 로그인해 주세요.' };
+      return { error: meResponse.error || 'Could not load user information. Log in again.' };
     }
 
     const user = toUser(meResponse.data);

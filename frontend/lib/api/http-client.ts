@@ -92,17 +92,17 @@ export async function apiRequest<T>(
 
     if (!response.ok) {
       if (data && 'message' in data) {
-        return { error: data.message || '요청 처리 중 오류가 발생했습니다.' };
+        return { error: data.message || 'Request failed.' };
       }
-      return { error: '요청 처리 중 오류가 발생했습니다.' };
+      return { error: 'Request failed.' };
     }
 
     if (data && 'data' in data) {
       return { data: data.data };
     }
 
-    return { error: '응답 형식이 올바르지 않습니다.' };
+    return { error: 'Unexpected response format.' };
   } catch {
-    return { error: '네트워크 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' };
+    return { error: 'Network error. Try again later.' };
   }
 }

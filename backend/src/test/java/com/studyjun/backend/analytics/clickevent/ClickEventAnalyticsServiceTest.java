@@ -1,10 +1,11 @@
 package com.studyjun.backend.analytics.clickevent;
 
-import com.studyjun.backend.analytics.clickcount.ClickCountBufferService;
+import com.studyjun.backend.analytics.infrastructure.optional.redis.ClickCountBufferService;
 import com.studyjun.backend.analytics.clickcount.ClickCountFlushWorker;
 import com.studyjun.backend.analytics.persistence.LinkClickEventRepository;
-import com.studyjun.backend.link.ShortLink;
-import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.link.domain.ShortLink;
+import com.studyjun.backend.link.infrastructure.persistence.ShortLinkRepository;
+import com.studyjun.backend.link.application.redirect.RedirectClickEventMessage;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -101,5 +102,33 @@ class ClickEventAnalyticsServiceTest {
         assertThat(linkClickEventRepository.count()).isEqualTo(1);
         assertThat(reloaded.getTotalClicks()).isEqualTo(1);
         verify(clickCountBufferService, times(1)).increment(shortLink.getId());
+    }
+
+    @Test
+    void directlyIncrementsAggregateWhenRedisBufferingFailsAfterRawEventInsert() {
+        ShortLink shortLink = shortLinkRepository.save(new ShortLink("https://example.com/target", "click03", null, null));
+        RedirectClickEventMessage message = new RedirectClickEventMessage(
+                UUID.randomUUID(),
+                Instant.parse("2026-03-19T10:25:30Z").toString(),
+                "req-analytics-3",
+                "test-suite",
+                shortLink.getId(),
+                shortLink.getShortCode(),
+                shortLink.getOriginalUrl(),
+                "KR",
+                "Direct",
+                "visitor-analytics-3"
+        );
+        when(clickCountBufferService.increment(shortLink.getId()))
+                .thenThrow(new IllegalStateException("Redis unavailable"));
+
+        ClickEventAnalyticsService.ProcessingResult result = clickEventAnalyticsService.process(message);
+
+        ShortLink reloaded = shortLinkRepository.findById(shortLink.getId()).orElseThrow();
+        assertThat(result).isEqualTo(ClickEventAnalyticsService.ProcessingResult.INSERTED);
+        assertThat(linkClickEventRepository.existsByEventId(message.eventId())).isTrue();
+        assertThat(reloaded.getTotalClicks()).isEqualTo(1);
+        verify(clickCountBufferService).increment(shortLink.getId());
+        verify(clickCountBufferService, never()).findBufferedKeys();
     }
 }

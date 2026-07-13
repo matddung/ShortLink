@@ -1,6 +1,6 @@
 package com.studyjun.backend.link.application.redirect;
 
-import com.studyjun.backend.link.RedirectService;
+import com.studyjun.backend.link.application.redirect.RedirectService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

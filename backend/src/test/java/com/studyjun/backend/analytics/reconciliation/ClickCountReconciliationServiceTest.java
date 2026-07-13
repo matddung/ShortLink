@@ -2,8 +2,9 @@ package com.studyjun.backend.analytics.reconciliation;
 
 import com.studyjun.backend.analytics.persistence.LinkClickEvent;
 import com.studyjun.backend.analytics.persistence.LinkClickEventRepository;
-import com.studyjun.backend.link.ShortLink;
-import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.link.domain.ShortLink;
+import com.studyjun.backend.link.infrastructure.persistence.ShortLinkRepository;
+import com.studyjun.backend.link.infrastructure.persistence.JpaClickAggregateUpdater;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -16,7 +17,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-@Import(ClickCountReconciliationService.class)
+@Import({ClickCountReconciliationService.class, JpaClickAggregateUpdater.class})
 class ClickCountReconciliationServiceTest {
 
     @Autowired
@@ -35,7 +36,7 @@ class ClickCountReconciliationServiceTest {
 
         linkClickEventRepository.save(new LinkClickEvent(
                 UUID.randomUUID(),
-                shortLink,
+                shortLink.getId(),
                 Instant.parse("2026-03-27T00:00:00Z"),
                 "req-1",
                 "test",
@@ -45,7 +46,7 @@ class ClickCountReconciliationServiceTest {
         ));
         linkClickEventRepository.save(new LinkClickEvent(
                 UUID.randomUUID(),
-                shortLink,
+                shortLink.getId(),
                 Instant.parse("2026-03-27T01:00:00Z"),
                 "req-2",
                 "test",
@@ -75,7 +76,7 @@ class ClickCountReconciliationServiceTest {
 
         linkClickEventRepository.save(new LinkClickEvent(
                 UUID.randomUUID(),
-                mismatched,
+                mismatched.getId(),
                 Instant.parse("2026-03-27T02:00:00Z"),
                 "req-3",
                 "test",
@@ -86,7 +87,7 @@ class ClickCountReconciliationServiceTest {
 
         linkClickEventRepository.save(new LinkClickEvent(
                 UUID.randomUUID(),
-                alreadyConsistent,
+                alreadyConsistent.getId(),
                 Instant.parse("2026-03-27T03:00:00Z"),
                 "req-4",
                 "test",

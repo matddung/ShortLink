@@ -1,6 +1,6 @@
 package com.studyjun.backend.link.api;
 
-import com.studyjun.backend.link.ShortLinkMetrics;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
 import com.studyjun.backend.link.application.redirect.LinkRedirectService;
 import com.studyjun.backend.link.support.GeoResolver;
 import com.studyjun.backend.link.support.ReferrerResolver;

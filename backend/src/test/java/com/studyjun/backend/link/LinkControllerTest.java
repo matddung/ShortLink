@@ -2,8 +2,11 @@ package com.studyjun.backend.link;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
-import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.link.api.LinkRequest;
+import com.studyjun.backend.link.domain.ShortLink;
+import com.studyjun.backend.link.application.redirect.ClickEventPublisher;
+import com.studyjun.backend.link.application.redirect.RedirectClickEventMessage;
+import com.studyjun.backend.link.infrastructure.persistence.ShortLinkRepository;
 import com.studyjun.backend.analytics.persistence.LinkClickEvent;
 import com.studyjun.backend.analytics.persistence.LinkClickEventRepository;
 import com.studyjun.backend.auth.AuthRequest;
@@ -28,6 +31,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -234,6 +238,159 @@ class LinkControllerTest {
     }
 
     @Test
+    void authenticatedUserCanDeactivateAndReactivateOwnLink() throws Exception {
+        String email = "status-" + UUID.randomUUID() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(email, "password123", "status-user"))))
+                .andExpect(status().isOk());
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+
+        MvcResult createResult = mockMvc.perform(post("/api/links")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\":\"https://status.example.com/path\",\"customCode\":\"status-link-01\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+        String linkId = created.path("id").asText();
+        String shortCode = created.path("shortCode").asText();
+
+        mockMvc.perform(patch("/api/links/{id}/status", linkId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"inactive\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("inactive"));
+
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/api/links/{id}/status", linkId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"active\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("active"));
+
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://status.example.com/path"));
+    }
+
+    @Test
+    void updateStatusRejectsInvalidStatusContract() throws Exception {
+        String email = "invalid-status-" + UUID.randomUUID() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(email, "password123", "invalid-status-user"))))
+                .andExpect(status().isOk());
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+
+        MvcResult createResult = mockMvc.perform(post("/api/links")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\":\"https://invalid-status.example.com/path\",\"customCode\":\"invalid-status-link-01\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String linkId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+                .path("data")
+                .path("id")
+                .asText();
+
+        mockMvc.perform(patch("/api/links/{id}/status", linkId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"paused\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(containsString("status must be active or inactive")));
+    }
+
+    @Test
+    void authenticatedUserCannotUpdateAnotherUsersLinkStatus() throws Exception {
+        String ownerEmail = "owner-" + UUID.randomUUID() + "@example.com";
+        String otherEmail = "other-" + UUID.randomUUID() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(ownerEmail, "password123", "owner-user"))))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.SignupRequest(otherEmail, "password123", "other-user"))))
+                .andExpect(status().isOk());
+
+        MvcResult ownerLoginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(ownerEmail, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult otherLoginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthRequest.LoginRequest(otherEmail, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String ownerAccessToken = objectMapper.readTree(ownerLoginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+        String otherAccessToken = objectMapper.readTree(otherLoginResult.getResponse().getContentAsString())
+                .path("data")
+                .path("accessToken")
+                .asText();
+
+        MvcResult createResult = mockMvc.perform(post("/api/links")
+                        .header("Authorization", "Bearer " + ownerAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\":\"https://owner-status.example.com/path\",\"customCode\":\"owner-status-link-01\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+        String linkId = created.path("id").asText();
+        String shortCode = created.path("shortCode").asText();
+
+        mockMvc.perform(patch("/api/links/{id}/status", linkId)
+                        .header("Authorization", "Bearer " + otherAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"inactive\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("LINK_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/s/{shortCode}", shortCode))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://owner-status.example.com/path"));
+    }
+
+    @Test
     void linkStatsIncludesCountryAndReferrerAggregation() throws Exception {
         String email = "stats-" + UUID.randomUUID() + "@example.com";
 
@@ -381,7 +538,7 @@ class LinkControllerTest {
         shortLinkRepository.save(shortLink);
         linkClickEventRepository.save(new LinkClickEvent(
                 UUID.randomUUID(),
-                shortLink,
+                shortLink.getId(),
                 Instant.now(),
                 UUID.randomUUID().toString(),
                 "test-suite",

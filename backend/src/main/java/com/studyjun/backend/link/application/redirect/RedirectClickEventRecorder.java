@@ -1,8 +1,7 @@
 package com.studyjun.backend.link.application.redirect;
 
-import com.studyjun.backend.link.ResolvedRedirectTarget;
-import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
-import com.studyjun.backend.analytics.clickevent.RedirectClickEventMessage;
+import com.studyjun.backend.link.domain.ResolvedRedirectTarget;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -10,6 +9,7 @@ import java.time.Clock;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
+@Slf4j
 @Component
 public class RedirectClickEventRecorder {
 
@@ -22,18 +22,28 @@ public class RedirectClickEventRecorder {
     }
 
     public void record(RedirectRequest request, ResolvedRedirectTarget target) {
-        clickEventPublisher.publish(new RedirectClickEventMessage(
-                buildEventId(target.shortLinkId(), request.requestId()),
-                DateTimeFormatter.ISO_INSTANT.format(clock.instant()),
-                request.requestId(),
-                request.source(),
-                target.shortLinkId(),
-                request.shortCode(),
-                target.originalUrl(),
-                request.countryCode(),
-                request.referrer(),
-                request.visitorKey()
-        ));
+        try {
+            clickEventPublisher.publish(new RedirectClickEventMessage(
+                    buildEventId(target.shortLinkId(), request.requestId()),
+                    DateTimeFormatter.ISO_INSTANT.format(clock.instant()),
+                    request.requestId(),
+                    request.source(),
+                    target.shortLinkId(),
+                    request.shortCode(),
+                    target.originalUrl(),
+                    request.countryCode(),
+                    request.referrer(),
+                    request.visitorKey()
+            ));
+        } catch (RuntimeException ex) {
+            log.error(
+                    "Redirect succeeded but click event publishing failed. shortLinkId={}, shortCode={}, requestId={}",
+                    target.shortLinkId(),
+                    request.shortCode(),
+                    request.requestId(),
+                    ex
+            );
+        }
     }
 
     private UUID buildEventId(Long shortLinkId, String requestId) {

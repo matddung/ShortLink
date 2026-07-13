@@ -33,7 +33,7 @@ public class AuthService {
     @Transactional
     public AuthResponse.UserResponse signup(AuthRequest.SignupRequest request) {
         if (userRepository.existsByEmail(request.email())) {
-            throw new BusinessException("EMAIL_ALREADY_EXISTS", "이미 사용 중인 이메일입니다.", HttpStatus.CONFLICT);
+            throw new BusinessException("EMAIL_ALREADY_EXISTS", "Email is already in use.", HttpStatus.CONFLICT);
         }
         User savedUser = userRepository.save(new User(
                 request.email(),
@@ -46,10 +46,10 @@ public class AuthService {
     @Transactional
     public AuthResponse.TokenResponse login(AuthRequest.LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new BusinessException("INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED));
+                .orElseThrow(() -> new BusinessException("INVALID_CREDENTIALS", "Email or password is invalid.", HttpStatus.UNAUTHORIZED));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new BusinessException("INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("INVALID_CREDENTIALS", "Email or password is invalid.", HttpStatus.UNAUTHORIZED);
         }
 
         return issueTokens(user);
@@ -61,22 +61,22 @@ public class AuthService {
         try {
             claims = jwtTokenProvider.parseClaims(refreshToken);
         } catch (ExpiredJwtException ex) {
-            throw new BusinessException("EXPIRED_REFRESH_TOKEN", "리프레시 토큰이 만료되었습니다.", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("EXPIRED_REFRESH_TOKEN", "Refresh token has expired.", HttpStatus.UNAUTHORIZED);
         } catch (Exception ex) {
-            throw new BusinessException("INVALID_REFRESH_TOKEN", "유효하지 않은 리프레시 토큰입니다.", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("INVALID_REFRESH_TOKEN", "Refresh token is invalid.", HttpStatus.UNAUTHORIZED);
         }
 
         Long userId = Long.parseLong(claims.getSubject());
 
         RefreshToken savedToken = refreshTokenRepository.findByToken(refreshToken)
-                .orElseThrow(() -> new BusinessException("INVALID_REFRESH_TOKEN", "저장된 리프레시 토큰이 아닙니다.", HttpStatus.UNAUTHORIZED));
+                .orElseThrow(() -> new BusinessException("INVALID_REFRESH_TOKEN", "Refresh token is not stored.", HttpStatus.UNAUTHORIZED));
 
         if (savedToken.getExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new BusinessException("EXPIRED_REFRESH_TOKEN", "리프레시 토큰이 만료되었습니다.", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("EXPIRED_REFRESH_TOKEN", "Refresh token has expired.", HttpStatus.UNAUTHORIZED);
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found.", HttpStatus.NOT_FOUND));
 
         return issueTokens(user);
     }
@@ -90,7 +90,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AuthResponse.UserResponse getCurrentUser(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found.", HttpStatus.NOT_FOUND));
 
         return new AuthResponse.UserResponse(user.getId(), user.getEmail(), user.getName());
     }

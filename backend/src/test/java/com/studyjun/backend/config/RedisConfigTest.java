@@ -1,5 +1,6 @@
 package com.studyjun.backend.config;
 
+import com.studyjun.backend.infrastructure.optional.redis.RedisConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.data.redis.connection.RedisConnectionFactory;

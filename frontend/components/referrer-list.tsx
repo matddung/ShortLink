@@ -15,7 +15,7 @@ export function ReferrerList({ referrers }: ReferrerListProps) {
       <div className="mt-6 space-y-4">
         {referrers.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            아직 유입 경로 데이터가 없습니다.
+            No referrer data yet.
           </p>
         ) : (
           referrers.map((referrer) => (

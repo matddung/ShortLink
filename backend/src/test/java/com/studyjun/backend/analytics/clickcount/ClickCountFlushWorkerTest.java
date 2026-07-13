@@ -1,7 +1,8 @@
 package com.studyjun.backend.analytics.clickcount;
 
-import com.studyjun.backend.link.ShortLinkMetrics;
-import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.analytics.clickevent.ClickAggregateUpdater;
+import com.studyjun.backend.analytics.infrastructure.optional.redis.ClickCountBufferService;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,7 @@ import static org.mockito.Mockito.*;
 class ClickCountFlushWorkerTest {
 
     private final ClickCountBufferService clickCountBufferService = mock(ClickCountBufferService.class);
-    private final ShortLinkRepository shortLinkRepository = mock(ShortLinkRepository.class);
+    private final ClickAggregateUpdater clickAggregateUpdater = mock(ClickAggregateUpdater.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private ClickCountFlushWorker clickCountFlushWorker;
 
@@ -23,7 +24,7 @@ class ClickCountFlushWorkerTest {
     void setUp() {
         clickCountFlushWorker = new ClickCountFlushWorker(
                 clickCountBufferService,
-                shortLinkRepository,
+                clickAggregateUpdater,
                 30_000L,
                 new ShortLinkMetrics(meterRegistry)
         );
@@ -35,11 +36,11 @@ class ClickCountFlushWorkerTest {
         when(clickCountBufferService.findBufferedKeys()).thenReturn(Set.of("analytics:click-count:7"));
         when(clickCountBufferService.extractShortLinkId("analytics:click-count:7")).thenReturn(7L);
         when(clickCountBufferService.consumeBufferedCount("analytics:click-count:7")).thenReturn(3L);
-        when(shortLinkRepository.incrementTotalClicks(7L, 3L)).thenReturn(1);
+        when(clickAggregateUpdater.incrementTotalClicks(7L, 3L)).thenReturn(1);
 
         clickCountFlushWorker.flush();
 
-        verify(shortLinkRepository).incrementTotalClicks(7L, 3L);
+        verify(clickAggregateUpdater).incrementTotalClicks(7L, 3L);
         verify(clickCountBufferService).releaseFlushLock(anyString());
         assertThat(meterRegistry.get("shortlink.flush.execution.total").counter().count()).isEqualTo(1.0);
         assertThat(meterRegistry.get("shortlink.flush.success.total").counter().count()).isEqualTo(1.0);
@@ -56,7 +57,7 @@ class ClickCountFlushWorkerTest {
 
         clickCountFlushWorker.flush();
 
-        verify(shortLinkRepository, never()).incrementTotalClicks(anyLong(), anyLong());
+        verify(clickAggregateUpdater, never()).incrementTotalClicks(anyLong(), anyLong());
         verify(clickCountBufferService).releaseFlushLock(anyString());
         assertThat(meterRegistry.get("shortlink.flush.execution.total").counter().count()).isEqualTo(1.0);
         assertThat(meterRegistry.get("shortlink.flush.success.total").counter().count()).isZero();
@@ -69,8 +70,27 @@ class ClickCountFlushWorkerTest {
         clickCountFlushWorker.flush();
 
         verify(clickCountBufferService, never()).findBufferedKeys();
-        verify(shortLinkRepository, never()).incrementTotalClicks(anyLong(), anyLong());
+        verify(clickAggregateUpdater, never()).incrementTotalClicks(anyLong(), anyLong());
         verify(clickCountBufferService, never()).releaseFlushLock(anyString());
         assertThat(meterRegistry.get("shortlink.flush.execution.total").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void restoresConsumedCountWhenDatabaseAggregateUpdateFails() {
+        when(clickCountBufferService.tryAcquireFlushLock(anyString(), any(Duration.class))).thenReturn(true);
+        when(clickCountBufferService.findBufferedKeys()).thenReturn(Set.of("analytics:click-count:7"));
+        when(clickCountBufferService.extractShortLinkId("analytics:click-count:7")).thenReturn(7L);
+        when(clickCountBufferService.consumeBufferedCount("analytics:click-count:7")).thenReturn(3L);
+        when(clickAggregateUpdater.incrementTotalClicks(7L, 3L))
+                .thenThrow(new IllegalStateException("database unavailable"));
+
+        clickCountFlushWorker.flush();
+
+        verify(clickAggregateUpdater).incrementTotalClicks(7L, 3L);
+        verify(clickCountBufferService).restoreBufferedCount("analytics:click-count:7", 3L);
+        verify(clickCountBufferService).releaseFlushLock(anyString());
+        assertThat(meterRegistry.get("shortlink.flush.execution.total").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("shortlink.flush.success.total").counter().count()).isZero();
+        assertThat(meterRegistry.get("shortlink.flush.failure.total").counter().count()).isEqualTo(1.0);
     }
 }

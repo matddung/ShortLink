@@ -62,12 +62,12 @@ export function AuthForm({ mode }: AuthFormProps) {
           <div className="rounded-lg border border-border bg-card p-6">
             <div className="mb-6 text-center">
               <h1 className="text-xl font-semibold text-foreground">
-                {mode === 'login' ? '다시 오신 것을 환영합니다' : '계정을 만들어보세요'}
+                {mode === 'login' ? 'Welcome back' : 'Create your account'}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 {mode === 'login' 
-                  ? '링크를 관리하려면 로그인하세요' 
-                  : '무료로 URL 단축을 시작하세요'}
+                  ? 'Log in to manage your links' 
+                  : 'Start shortening URLs for free'}
               </p>
             </div>
 
@@ -87,7 +87,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                       id="name"
                       name="name"
                       type="text"
-                      placeholder="이름을 입력하세요"
+                      placeholder="Enter your name"
                       value={formData.name}
                       onChange={handleChange}
                       required
@@ -102,7 +102,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="이메일을 입력하세요"
+                    placeholder="Enter your email"
                     value={formData.email}
                     onChange={handleChange}
                     required
@@ -116,7 +116,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                     id="password"
                     name="password"
                     type="password"
-                    placeholder="비밀번호를 입력하세요"
+                    placeholder="Enter your password"
                     value={formData.password}
                     onChange={handleChange}
                     required
@@ -129,9 +129,9 @@ export function AuthForm({ mode }: AuthFormProps) {
                   {isLoading ? (
                     <Spinner className="h-4 w-4" />
                   ) : mode === 'login' ? (
-                    '로그인'
+                    'Log in'
                   ) : (
-                    '회원가입'
+                    'Sign up'
                   )}
                 </Button>
               </FieldGroup>
@@ -142,16 +142,16 @@ export function AuthForm({ mode }: AuthFormProps) {
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {mode === 'login' ? (
               <>
-                {'아직 계정이 없으신가요? '}
+                {'Do not have an account yet? '}
                 <Link href="/signup" className="text-primary hover:underline">
                   Sign up
                 </Link>
               </>
             ) : (
               <>
-                이미 계정이 있으신가요?{' '}
+                Already have an account?{' '}
                 <Link href="/login" className="text-primary hover:underline">
-                  로그인
+                  Log in
                 </Link>
               </>
             )}

@@ -35,7 +35,7 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                    objectMapper.writeValue(response.getWriter(), ErrorResponse.of("UNAUTHORIZED", "인증이 필요합니다."));
+                    objectMapper.writeValue(response.getWriter(), ErrorResponse.of("UNAUTHORIZED", "Authentication is required"));
                 }));
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

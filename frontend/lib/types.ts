@@ -7,7 +7,7 @@ export interface User {
 }
 
 // Link types
-export type LinkStatus = 'active' | 'inactive' | 'expired';
+export type LinkStatus = 'active' | 'inactive';
 
 export interface Link {
   id: string;

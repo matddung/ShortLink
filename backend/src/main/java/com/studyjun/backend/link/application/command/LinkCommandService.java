@@ -1,13 +1,13 @@
 package com.studyjun.backend.link.application.command;
 
-import com.studyjun.backend.link.AnonymousLinkExpiryPolicy;
-import com.studyjun.backend.link.ShortCodeService;
-import com.studyjun.backend.link.ShortLink;
-import com.studyjun.backend.link.ShortLinkRepository;
-import com.studyjun.backend.link.UrlValidationService;
+import com.studyjun.backend.common.BusinessException;
+import com.studyjun.backend.link.domain.AnonymousLinkExpiryPolicy;
+import com.studyjun.backend.link.domain.ShortLink;
+import com.studyjun.backend.link.infrastructure.persistence.ShortLinkRepository;
 import com.studyjun.backend.link.application.ShortLinkResult;
 import com.studyjun.backend.link.application.redirect.RedirectCacheInvalidator;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,7 +43,7 @@ public class LinkCommandService {
     public ShortLinkResult createAnonymous(String originalUrl, String ownerKey) {
         urlValidationService.validate(originalUrl);
 
-        String shortCode = shortCodeService.generateUniqueShortCode();
+        String shortCode = generateUniqueShortCode();
         Instant anonymousExpiresAt = Instant.now().plus(anonymousExpirationDays, ChronoUnit.DAYS);
         ShortLink saved = shortLinkRepository.save(new ShortLink(originalUrl, shortCode, ownerKey, anonymousExpiresAt));
         redirectCacheInvalidator.invalidate(saved.getShortCode());
@@ -55,7 +55,7 @@ public class LinkCommandService {
     public ShortLinkResult createForUser(String originalUrl, String customCode, Long userId) {
         urlValidationService.validate(originalUrl);
 
-        String shortCode = shortCodeService.resolveShortCode(customCode);
+        String shortCode = resolveAvailableShortCode(customCode);
         ShortLink shortLink = new ShortLink(originalUrl, shortCode, null, null);
         shortLink.claimToUser(userId);
 
@@ -93,6 +93,16 @@ public class LinkCommandService {
     }
 
     @Transactional
+    public ShortLinkResult updateStatus(Long linkId, Long userId, boolean active) {
+        ShortLink shortLink = shortLinkRepository.findByIdAndOwnerUserId(linkId, userId)
+                .orElseThrow(() -> new BusinessException("LINK_NOT_FOUND", "Link not found.", HttpStatus.NOT_FOUND));
+
+        shortLink.changeActive(active);
+        redirectCacheInvalidator.invalidate(shortLink.getShortCode());
+        return toResult(shortLink);
+    }
+
+    @Transactional
     public long purgeExpiredAnonymousLinks() {
         Instant threshold = Instant.now();
         List<ShortLink> expiredLinks = shortLinkRepository.findAllByOwnerUserIdIsNullAndAnonymousExpiresAtBefore(threshold);
@@ -102,6 +112,28 @@ public class LinkCommandService {
 
     private boolean isAnonymousExpired(ShortLink shortLink) {
         return anonymousLinkExpiryPolicy.isExpired(shortLink);
+    }
+
+    private String resolveAvailableShortCode(String customCode) {
+        if (customCode == null || customCode.isBlank()) {
+            return generateUniqueShortCode();
+        }
+
+        String shortCode = shortCodeService.resolveShortCode(customCode);
+        if (shortLinkRepository.existsByShortCode(shortCode)) {
+            throw new BusinessException("SHORT_CODE_ALREADY_EXISTS", "Custom code is already in use.", HttpStatus.CONFLICT);
+        }
+        return shortCode;
+    }
+
+    private String generateUniqueShortCode() {
+        for (int i = 0; i < 10; i++) {
+            String code = shortCodeService.generateShortCodeCandidate();
+            if (!shortLinkRepository.existsByShortCode(code)) {
+                return code;
+            }
+        }
+        throw new BusinessException("SHORT_CODE_GENERATION_FAILED", "Could not generate a short code. Try again.", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     private ShortLinkResult toResult(ShortLink shortLink) {

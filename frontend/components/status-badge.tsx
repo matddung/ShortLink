@@ -8,18 +8,14 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const statusConfig = {
+  const statusConfig: Record<LinkStatus, { label: string; className: string }> = {
     active: {
-      label: '활성',
+      label: 'Active',
       className: 'bg-primary/10 text-primary border-primary/20',
     },
     inactive: {
-      label: '비활성',
+      label: 'Inactive',
       className: 'bg-muted text-muted-foreground border-border',
-    },
-    expired: {
-      label: '만료',
-      className: 'bg-destructive/10 text-destructive border-destructive/20',
     },
   };
 

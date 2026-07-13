@@ -1,6 +1,5 @@
 package com.studyjun.backend.analytics.persistence;
 
-import com.studyjun.backend.link.ShortLink;
 import jakarta.persistence.*;
 import lombok.Getter;
 
@@ -24,9 +23,8 @@ public class LinkClickEvent {
     @Column(name = "event_id", nullable = false, updatable = false, unique = true)
     private UUID eventId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "short_link_id", nullable = false)
-    private ShortLink shortLink;
+    @Column(name = "short_link_id", nullable = false, updatable = false)
+    private Long shortLinkId;
 
     @Column(nullable = false)
     private Instant clickedAt;
@@ -50,7 +48,7 @@ public class LinkClickEvent {
     }
 
     public LinkClickEvent(UUID eventId,
-                          ShortLink shortLink,
+                          Long shortLinkId,
                           Instant clickedAt,
                           String requestId,
                           String source,
@@ -58,7 +56,7 @@ public class LinkClickEvent {
                           String referrer,
                           String visitorKey) {
         this.eventId = eventId;
-        this.shortLink = shortLink;
+        this.shortLinkId = shortLinkId;
         this.clickedAt = clickedAt;
         this.requestId = requestId;
         this.source = source;

@@ -1,7 +1,8 @@
 package com.studyjun.backend.analytics.clickcount;
 
-import com.studyjun.backend.link.ShortLinkMetrics;
-import com.studyjun.backend.link.ShortLinkRepository;
+import com.studyjun.backend.analytics.clickevent.ClickAggregateUpdater;
+import com.studyjun.backend.analytics.infrastructure.optional.redis.ClickCountBufferService;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,16 +19,16 @@ import java.util.UUID;
 public class ClickCountFlushWorker {
 
     private final ClickCountBufferService clickCountBufferService;
-    private final ShortLinkRepository shortLinkRepository;
+    private final ClickAggregateUpdater clickAggregateUpdater;
     private final Duration flushLockTtl;
     private final ShortLinkMetrics shortLinkMetrics;
 
     public ClickCountFlushWorker(ClickCountBufferService clickCountBufferService,
-                                 ShortLinkRepository shortLinkRepository,
+                                 ClickAggregateUpdater clickAggregateUpdater,
                                  @org.springframework.beans.factory.annotation.Value("${app.analytics.flush.lock-ttl-ms:30000}") long flushLockTtlMs,
                                  ShortLinkMetrics shortLinkMetrics) {
         this.clickCountBufferService = clickCountBufferService;
-        this.shortLinkRepository = shortLinkRepository;
+        this.clickAggregateUpdater = clickAggregateUpdater;
         this.flushLockTtl = Duration.ofMillis(flushLockTtlMs);
         this.shortLinkMetrics = shortLinkMetrics;
     }
@@ -66,7 +67,7 @@ public class ClickCountFlushWorker {
                 return;
             }
 
-            int updatedRows = shortLinkRepository.incrementTotalClicks(shortLinkId, delta);
+            int updatedRows = clickAggregateUpdater.incrementTotalClicks(shortLinkId, delta);
             if (updatedRows == 0) {
                 log.warn("Skipping buffered click-count flush because short link was not found. shortLinkId={}, delta={}",
                         shortLinkId, delta);

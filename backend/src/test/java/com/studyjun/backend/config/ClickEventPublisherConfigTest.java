@@ -1,8 +1,8 @@
 package com.studyjun.backend.config;
 
-import com.studyjun.backend.link.ShortLinkMetrics;
-import com.studyjun.backend.analytics.clickevent.ClickEventPublisher;
-import com.studyjun.backend.link.infrastructure.event.KafkaClickEventPublisher;
+import com.studyjun.backend.common.observability.ShortLinkMetrics;
+import com.studyjun.backend.link.application.redirect.ClickEventPublisher;
+import com.studyjun.backend.link.infrastructure.optional.kafka.KafkaClickEventPublisher;
 import com.studyjun.backend.link.infrastructure.event.NoopClickEventPublisher;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;

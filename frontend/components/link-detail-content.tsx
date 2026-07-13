@@ -109,7 +109,7 @@ export function LinkDetailContent() {
         <Header variant="app" />
         <main className="mx-auto max-w-6xl px-4 py-8">
           <ErrorState
-            title="링크를 찾을 수 없습니다"
+            title="Link not found"
             message={error || 'The link you are looking for does not exist.'}
             onRetry={() => router.push('/dashboard')}
           />
@@ -129,7 +129,7 @@ export function LinkDetailContent() {
           className="mb-6 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          대시보드로 돌아가기
+          Back to dashboard
         </Link>
 
         {/* Link Header */}
@@ -146,7 +146,7 @@ export function LinkDetailContent() {
                 {link.originalUrl}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                생성일 {formatDate(link.createdAt)}
+                Created {formatDate(link.createdAt)}
               </p>
             </div>
             <div className="flex gap-2">
@@ -154,19 +154,19 @@ export function LinkDetailContent() {
                 {copied ? (
                   <>
                     <Check className="mr-2 h-4 w-4 text-primary" />
-                    복사됨
+                    Copied
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-4 w-4" />
-                    복사
+                    Copy
                   </>
                 )}
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <a href={link.shortUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="mr-2 h-4 w-4" />
-                  열기
+                  Open
                 </a>
               </Button>
             </div>
@@ -179,24 +179,24 @@ export function LinkDetailContent() {
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <AnalyticsSummaryCard
                 icon={<MousePointerClick className="h-5 w-5" />}
-                label="총 클릭 수"
+                label="Total clicks"
                 value={stats.totalClicks.toLocaleString()}
               />
               <AnalyticsSummaryCard
                 icon={<Users className="h-5 w-5" />}
-                label="고유 클릭 수"
+                label="Unique clicks"
                 value={stats.uniqueClicks.toLocaleString()}
               />
               <AnalyticsSummaryCard
                 icon={<Clock className="h-5 w-5" />}
-                label="마지막 클릭"
+                label="Last click"
                 value={formatLastClicked(stats.lastClickedAt)}
               />
               <AnalyticsSummaryCard
                 icon={<Globe className="h-5 w-5" />}
-                label="상위 국가"
-                value={stats.topCountries[0]?.country || '없음'}
-                subValue={stats.topCountries[0] ? `${stats.topCountries[0].count}회 클릭` : undefined}
+                label="Top country"
+                value={stats.topCountries[0]?.country || 'None'}
+                subValue={stats.topCountries[0] ? `${stats.topCountries[0].count} clicks` : undefined}
               />
             </div>
 
@@ -212,7 +212,7 @@ export function LinkDetailContent() {
 
             {/* Top Countries */}
             <div className="mt-6 rounded-lg border border-border bg-card p-5">
-              <h3 className="font-medium text-foreground">상위 국가</h3>
+              <h3 className="font-medium text-foreground">Top Countries</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Geographic distribution of your clicks
               </p>
@@ -220,7 +220,7 @@ export function LinkDetailContent() {
                <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {stats.topCountries.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    아직 국가별 집계 데이터가 없습니다.
+                    No country data yet.
                   </p>
                 ) : (
                   stats.topCountries.map((country, index) => (

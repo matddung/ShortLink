@@ -2,6 +2,7 @@ package com.studyjun.backend.link.api;
 
 import com.studyjun.backend.common.ApiResponse;
 import com.studyjun.backend.link.application.query.LinkQueryService;
+import com.studyjun.backend.link.application.query.LinkStatsService;
 import com.studyjun.backend.user.User;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -15,13 +16,16 @@ public class LinkQueryController {
     private static final String ANONYMOUS_OWNER_COOKIE = "anonymous_owner";
 
     private final LinkQueryService linkQueryService;
+    private final LinkStatsService linkStatsService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
     private final LinkResponseMapper linkResponseMapper;
 
     public LinkQueryController(LinkQueryService linkQueryService,
+                               LinkStatsService linkStatsService,
                                AuthenticatedUserResolver authenticatedUserResolver,
                                LinkResponseMapper linkResponseMapper) {
         this.linkQueryService = linkQueryService;
+        this.linkStatsService = linkStatsService;
         this.authenticatedUserResolver = authenticatedUserResolver;
         this.linkResponseMapper = linkResponseMapper;
     }
@@ -48,6 +52,6 @@ public class LinkQueryController {
             Authentication authentication
     ) {
         User user = authenticatedUserResolver.resolve(authentication);
-        return ApiResponse.ok(linkResponseMapper.toResponse(linkQueryService.getLinkStats(id, user.getId())));
+        return ApiResponse.ok(linkResponseMapper.toResponse(linkStatsService.getLinkStats(id, user.getId())));
     }
 }
